@@ -105,6 +105,25 @@ describe('EconomicClient', () => {
     expect(init.body).toBe(payload);
   });
 
+  it('un-stringifies a JSON-string body instead of double-encoding it on the wire', async () => {
+    const fetchMock = vi.fn<typeof fetch>(async () => jsonResponse({ ok: true }));
+    const client = new EconomicClient({
+      appSecretToken: 'app-secret',
+      agreementGrantToken: 'grant-token',
+      restBaseUrl: 'https://example.test',
+      fetchImpl: fetchMock as unknown as typeof fetch,
+    });
+
+    await client.rest('/products/1020', {
+      method: 'PUT',
+      body: '{"productNumber":"1020","name":"Widget"}',
+      idempotencyKey: 'idem-12345',
+    });
+
+    const init = fetchMock.mock.calls[0]?.[1] as RequestInit;
+    expect(init.body).toBe('{"productNumber":"1020","name":"Widget"}');
+  });
+
   it('rejects requests that combine JSON body and rawBody', async () => {
     const fetchMock = vi.fn<typeof fetch>(async () => jsonResponse({ ok: true }));
     const client = new EconomicClient({

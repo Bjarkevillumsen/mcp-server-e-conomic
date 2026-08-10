@@ -1,4 +1,5 @@
 import { EconomicHttpError } from '../errors.js';
+import { normalizeJsonBody } from './json.js';
 
 export type HttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
 export type QueryValue = string | number | boolean | null | undefined;
@@ -121,7 +122,7 @@ export class EconomicClient {
         ? options.rawBody
         : options.body === undefined
           ? undefined
-          : JSON.stringify(options.body);
+          : JSON.stringify(normalizeJsonBody(options.body));
 
     const response = await this.fetchImpl(resolvedUrl, {
       method,

@@ -1,7 +1,7 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod/v4';
 import type { EconomicClient, HttpMethod, QueryValue } from '../economic/client.js';
-import { ECONOMIC_SERVICES, searchCapabilities, getCapability, getSchemaSummary } from '../economic/catalog.js';
+import { ECONOMIC_SERVICES, resolveReadPathTemplate, searchCapabilities, getCapability, getSchemaSummary } from '../economic/catalog.js';
 import { callEndpoint, type EndpointCallInput } from '../economic/endpoints.js';
 import { prepareOperation, verifyPreparedOperation, type PreparedOperation } from '../economic/operations.js';
 import { checkPolicy, isBookingCapability } from '../economic/policy.js';
@@ -15,6 +15,11 @@ const methodSchema = z.enum(['GET', 'POST', 'PUT', 'PATCH', 'DELETE']);
 const queryValueSchema = z.union([z.string(), z.number(), z.boolean(), z.null()]).optional();
 const querySchema = z.record(z.string(), queryValueSchema).optional();
 const pathParamsSchema = z.record(z.string(), z.union([z.string(), z.number()])).optional();
+// Typed as an object (not z.unknown()) so the JSON Schema advertises
+// `type: "object"` — without that hint, some MCP clients stringify the
+// argument instead of nesting it, which e-conomic then rejects as
+// "Expected a JSON with an object as the root element".
+const bodySchema = z.record(z.string(), z.unknown()).optional();
 
 const endpointInputSchema = z.object({
   serviceId: serviceIdSchema,
@@ -22,7 +27,7 @@ const endpointInputSchema = z.object({
   pathTemplate: z.string().trim().min(1),
   pathParams: pathParamsSchema,
   query: querySchema,
-  body: z.unknown().optional(),
+  body: bodySchema,
   idempotencyKey: z.string().trim().min(8).optional(),
 });
 
@@ -33,7 +38,7 @@ const preparedOperationSchema = z.object({
   pathTemplate: z.string().trim().min(1),
   pathParams: pathParamsSchema,
   query: querySchema,
-  body: z.unknown().optional(),
+  body: bodySchema,
   dryRun: z.literal(true),
   reason: z.string().trim().min(1),
   operationHash: z.string().trim().min(32),
@@ -194,7 +199,10 @@ export function registerEconomicTools(server: McpServer, client: EconomicClient)
   registerReadTool(server, 'economic_get_product_overview', client, {
     title: 'Get Product Overview',
     description: 'Read products, product groups, price groups, and sales price data.',
-    defaultServiceId: 'products',
+    // The OpenAPI products service's /paged and /specialprices paths 404 on
+    // e-conomic's side; the classic REST surface (/products, /products/{n})
+    // is the reliable path for this resource.
+    defaultServiceId: 'rest',
     defaultResource: 'products',
   });
   registerReadTool(server, 'economic_get_sales_document', client, {
@@ -380,8 +388,7 @@ export function registerEconomicTools(server: McpServer, client: EconomicClient)
       },
     },
     async input => {
-      const operation = input.operation as PreparedOperation;
-      verifyPreparedOperation(operation);
+      const operation = verifyPreparedOperation(input.operation as PreparedOperation);
 
       if (isBookingCapability(operation.capability)) {
         throw new Error(
@@ -530,8 +537,7 @@ export function registerEconomicTools(server: McpServer, client: EconomicClient)
       },
     },
     async input => {
-      const operation = input.operation as PreparedOperation;
-      verifyPreparedOperation(operation);
+      const operation = verifyPreparedOperation(input.operation as PreparedOperation);
 
       if (!isBookingCapability(operation.capability)) {
         throw new Error(
@@ -886,12 +892,10 @@ function registerReadTool(
       },
     },
     async input => {
-      const pathTemplate =
-        input.number !== undefined
-          ? `/${input.resource}/{number}`
-          : input.paged
-            ? `/${input.resource}/paged`
-            : `/${input.resource}`;
+      const pathTemplate = resolveReadPathTemplate(input.serviceId, input.resource, {
+        number: input.number,
+        paged: input.paged,
+      });
       const pathParams = input.number === undefined ? undefined : { number: input.number };
 
       return jsonToolResult(
@@ -940,7 +944,7 @@ function registerPrepareTool(
         pathTemplate: z.string().trim().min(1).optional(),
         pathParams: pathParamsSchema,
         query: querySchema,
-        body: z.unknown().optional(),
+        body: bodySchema,
         reason: z.string().trim().min(1),
       },
       annotations: {

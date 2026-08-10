@@ -71,4 +71,38 @@ describe('write policy', () => {
       }),
     ).toThrow('hash does not match');
   });
+
+  it('normalizes a JSON-string body so the prepare result carries a real object', () => {
+    const operation = prepareOperation({
+      capability: 'economic_prepare_product_change',
+      serviceId: 'products',
+      method: 'PUT',
+      pathTemplate: '/products/{number}',
+      pathParams: { number: 1020 },
+      body: '{"productNumber":"1020","name":"Widget"}',
+      reason: 'Client stringified the body before sending it',
+    });
+
+    expect(operation.body).toEqual({ productNumber: '1020', name: 'Widget' });
+  });
+
+  it('verifies a hash across the object and JSON-string forms of the same body', () => {
+    const operation = prepareOperation({
+      capability: 'economic_prepare_product_change',
+      serviceId: 'products',
+      method: 'PUT',
+      pathTemplate: '/products/{number}',
+      pathParams: { number: 1020 },
+      body: { productNumber: '1020', name: 'Widget' },
+      reason: 'Create then commit round trip',
+    });
+
+    // Simulates a client that re-stringifies the body when it echoes the
+    // prepared operation back for commit — the hash must still match, and
+    // the returned operation must carry a real object, not the string.
+    const restringified = { ...operation, body: JSON.stringify(operation.body) };
+    const verified = verifyPreparedOperation(restringified);
+
+    expect(verified.body).toEqual({ productNumber: '1020', name: 'Widget' });
+  });
 });

@@ -4,6 +4,7 @@ import {
   ECONOMIC_SERVICES,
   findEndpoint,
   getSchemaSummary,
+  resolveReadPathTemplate,
   searchCapabilities,
 } from '../src/economic/catalog.js';
 import { materializePath } from '../src/economic/endpoints.js';
@@ -84,5 +85,22 @@ describe('e-conomic catalog', () => {
 
   it('contains a substantial endpoint coverage layer', () => {
     expect(ENDPOINT_OPERATIONS.length).toBeGreaterThan(100);
+  });
+
+  it('resolves the plain collection path for REST-surfaced services even when paged is requested', () => {
+    // /suppliers/paged is not allowlisted for the REST surface — regression
+    // for a curated read tool defaulting to a paged path that 404s/errors.
+    expect(resolveReadPathTemplate('rest', 'suppliers', { paged: true })).toBe('/suppliers');
+    expect(findEndpoint('rest', 'GET', resolveReadPathTemplate('rest', 'suppliers', { paged: true }))).toBeDefined();
+  });
+
+  it('resolves the /paged collection path for OpenAPI-surfaced services', () => {
+    expect(resolveReadPathTemplate('projects', 'Projects', { paged: true })).toBe('/Projects/paged');
+    expect(resolveReadPathTemplate('projects', 'Projects', { paged: false })).toBe('/Projects');
+  });
+
+  it('resolves the item path when a number is supplied, regardless of surface', () => {
+    expect(resolveReadPathTemplate('rest', 'suppliers', { number: 42, paged: true })).toBe('/suppliers/{number}');
+    expect(resolveReadPathTemplate('projects', 'Projects', { number: 42, paged: true })).toBe('/Projects/{number}');
   });
 });

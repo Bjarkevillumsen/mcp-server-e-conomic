@@ -233,6 +233,25 @@ export function findService(serviceId: string): EconomicService {
   return service;
 }
 
+/**
+ * Only the OpenAPI surface registers a `/{resource}/paged` endpoint; the
+ * classic REST surface paginates the plain collection path via
+ * skippages/pagesize query params instead (a `/paged` path either 404s on
+ * e-conomic's side or fails the local allowlist there).
+ */
+export function resolveReadPathTemplate(
+  serviceId: string,
+  resource: string,
+  options: { number?: string | number; paged: boolean },
+): string {
+  if (options.number !== undefined) {
+    return `/${resource}/{number}`;
+  }
+
+  const isPagedSurface = findService(serviceId).surface === 'openapi';
+  return options.paged && isPagedSurface ? `/${resource}/paged` : `/${resource}`;
+}
+
 export function findEndpoint(
   serviceId: string,
   method: HttpMethod,

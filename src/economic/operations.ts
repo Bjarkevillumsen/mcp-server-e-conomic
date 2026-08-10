@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import type { HttpMethod, QueryValue } from './client.js';
 import { findEndpoint } from './catalog.js';
 import { materializePath } from './endpoints.js';
+import { normalizeJsonBody } from './json.js';
 import { checkPolicy, type PolicyDecision } from './policy.js';
 
 export interface PreparedOperation {
@@ -32,12 +33,13 @@ export interface PrepareOperationInput {
 export function prepareOperation(input: PrepareOperationInput): PreparedOperation {
   const endpoint = findEndpoint(input.serviceId, input.method, input.pathTemplate);
   const path = materializePath(endpoint, input.pathParams);
+  const body = normalizeJsonBody(input.body);
   const policyDecision = checkPolicy({
     capability: input.capability,
     serviceId: input.serviceId,
     method: input.method,
     path,
-    body: input.body,
+    body,
   });
   const operationBase = {
     capability: input.capability,
@@ -46,7 +48,7 @@ export function prepareOperation(input: PrepareOperationInput): PreparedOperatio
     pathTemplate: input.pathTemplate,
     pathParams: input.pathParams,
     query: input.query,
-    body: input.body,
+    body,
     reason: input.reason,
   };
 
@@ -58,7 +60,14 @@ export function prepareOperation(input: PrepareOperationInput): PreparedOperatio
   };
 }
 
-export function verifyPreparedOperation(operation: PreparedOperation): void {
+/**
+ * Verifies the operation hash and returns the operation with its body
+ * normalized back to an object/array, in case the round trip through the
+ * MCP client re-stringified it. Callers must use the returned operation
+ * (not the input) for policy checks and dispatch.
+ */
+export function verifyPreparedOperation(operation: PreparedOperation): PreparedOperation {
+  const body = normalizeJsonBody(operation.body);
   const expected = stableHash({
     capability: operation.capability,
     serviceId: operation.serviceId,
@@ -66,13 +75,15 @@ export function verifyPreparedOperation(operation: PreparedOperation): void {
     pathTemplate: operation.pathTemplate,
     pathParams: operation.pathParams,
     query: operation.query,
-    body: operation.body,
+    body,
     reason: operation.reason,
   });
 
   if (expected !== operation.operationHash) {
     throw new Error('Prepared operation hash does not match the operation payload.');
   }
+
+  return { ...operation, body };
 }
 
 function stableHash(value: unknown): string {
