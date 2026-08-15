@@ -1,8 +1,6 @@
 name: Publish image
 
 on:
-  push:
-    branches: [main]
   workflow_dispatch:
 
 permissions:
@@ -24,7 +22,7 @@ jobs:
           context: .
           push: true
           labels: |
-            org.opencontainers.image.source=https://github.com/borgels/mcp-server-e-conomic
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
           tags: |
             ghcr.io/${{ github.repository }}:latest
             ghcr.io/${{ github.repository }}:${{ github.sha }}

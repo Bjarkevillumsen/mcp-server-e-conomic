@@ -1,0 +1,11 @@
+# Optional locally-managed equivalent of the recommended dashboard route.
+# Remotely-managed tunnels should set this route in the Cloudflare dashboard.
+tunnel: 00000000-0000-0000-0000-000000000000
+credentials-file: C:\ProgramData\Cloudflared\00000000-0000-0000-0000-000000000000.json
+
+ingress:
+  - hostname: mcp.example.com
+    service: http://127.0.0.1:3000
+    originRequest:
+      connectTimeout: 10s
+  - service: http_status:404

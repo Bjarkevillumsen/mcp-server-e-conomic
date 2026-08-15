@@ -23,7 +23,7 @@
     "economic-mcp-stage1": "./dist/transports/stage1-http-main.js"
   },
   "scripts": {
-    "build": "tsup src/transports/stdio.ts src/transports/http.ts src/transports/stage1-http-main.ts src/gateway.ts --format esm --dts --clean --sourcemap",
+    "build": "tsup src/transports/stdio.ts src/transports/http.ts src/transports/stage1-http-main.ts src/acceptance/live-stage1.ts src/gateway.ts --format esm --dts --clean --sourcemap",
     "dev": "tsx src/transports/stdio.ts",
     "dev:http": "tsx src/transports/http.ts",
     "dev:stage1:http": "tsx src/transports/stage1-http-main.ts",
@@ -32,7 +32,8 @@
     "test": "vitest run",
     "prepare": "npm run build",
     "prepack": "npm run typecheck && npm test && npm run build",
-    "smoke:live": "tsx test/live-smoke.ts"
+    "smoke:live": "tsx test/live-smoke.ts",
+    "acceptance:stage1": "tsx src/acceptance/live-stage1.ts"
   },
   "repository": {
     "type": "git",
