@@ -19,12 +19,14 @@
     ".env.example"
   ],
   "bin": {
-    "mcp-server-e-conomic": "./dist/transports/stdio.js"
+    "mcp-server-e-conomic": "./dist/transports/stdio.js",
+    "economic-mcp-stage1": "./dist/transports/stage1-stdio.js"
   },
   "scripts": {
-    "build": "tsup src/transports/stdio.ts src/transports/http.ts src/gateway.ts --format esm --dts --clean --sourcemap",
+    "build": "tsup src/transports/stdio.ts src/transports/http.ts src/transports/stage1-stdio.ts src/gateway.ts --format esm --dts --clean --sourcemap",
     "dev": "tsx src/transports/stdio.ts",
     "dev:http": "tsx src/transports/http.ts",
+    "dev:stage1": "tsx src/transports/stage1-stdio.ts",
     "auth:grant": "tsx src/auth/capture-grant-token.ts",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
