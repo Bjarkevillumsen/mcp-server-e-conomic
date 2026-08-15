@@ -4,6 +4,10 @@ import { redactSecrets } from '../errors.js';
 
 export interface AuditEvent {
   requestId?: string;
+  tenantId?: string;
+  userOid?: string;
+  username?: string;
+  role?: string;
   tool: string;
   action: string;
   serviceId?: string;
@@ -14,7 +18,15 @@ export interface AuditEvent {
   allowed?: boolean;
   reason?: string;
   status?: string;
+  result?: 'success' | 'failure' | 'denied';
   error?: string;
+  errorCategory?: string;
+  policyResult?: string;
+  economicHttpStatus?: number;
+  durationMs?: number;
+  agreementNumber?: string | number;
+  draftNumber?: string | number;
+  draftReference?: string | number;
 }
 
 export async function writeAuditEvent(event: AuditEvent): Promise<void> {
