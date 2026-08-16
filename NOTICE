@@ -1,0 +1,10 @@
+EconomicMcp Stage 1 customer profile
+
+This repository is derived from borgels/mcp-server-e-conomic, originally
+licensed under the Apache License, Version 2.0.
+
+Upstream copyright notice:
+Copyright 2026 Borgels Olsen Holding ApS (VAT DK39700425)
+
+Customer-specific changes are documented in docs/UPSTREAM.md and in the Git
+history. The upstream LICENSE is preserved at the repository root.
