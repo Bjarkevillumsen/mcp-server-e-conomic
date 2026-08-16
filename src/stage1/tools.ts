@@ -5,9 +5,17 @@ import { callEndpoint } from '../economic/endpoints.js';
 import { prepareOperation, verifyPreparedOperation } from '../economic/operations.js';
 import type { EconomicPolicy } from '../economic/policy.js';
 import { writeAuditEvent } from '../economic/audit.js';
-import { formatUnknownError } from '../errors.js';
+import { EconomicHttpError, formatUnknownError } from '../errors.js';
+import { primaryEconomicRole } from './auth.js';
 import { validateExpectedAgreement } from './agreement.js';
-import { STAGE1_ALLOWED_TOOLS, type Stage1ToolName } from './allowlist.js';
+import { STAGE1_ALLOWED_TOOLS, isStage1WriteTool, type Stage1ToolName } from './allowlist.js';
+import {
+  categorizeError,
+  economicStatusForResult,
+  operationCategory,
+  type Stage1RequestContext,
+  type Stage1TechnicalLogger,
+} from './logging.js';
 import { checkStage1Policy } from './policy.js';
 import {
   executeStage1Read,
@@ -82,6 +90,8 @@ export interface RegisterStage1ToolsOptions {
   authorize?: Stage1ToolAuthorizer;
   expectedAgreementNumber?: string | number;
   policy?: EconomicPolicy;
+  requestContext?: Stage1RequestContext;
+  logger?: Stage1TechnicalLogger;
 }
 
 export function registerStage1Tools(
@@ -256,6 +266,7 @@ interface DraftCreationInput {
 }
 
 async function createStage1Draft(input: DraftCreationInput): Promise<Record<string, unknown>> {
+  const startedAt = Date.now();
   const decision = checkStage1Policy({
     capability: input.tool,
     serviceId: input.serviceId,
@@ -265,6 +276,7 @@ async function createStage1Draft(input: DraftCreationInput): Promise<Record<stri
   }, input.options.policy);
 
   await writeAuditEvent({
+    ...auditIdentity(input.options),
     tool: input.tool,
     action: 'policy_check',
     serviceId: input.serviceId,
@@ -273,6 +285,7 @@ async function createStage1Draft(input: DraftCreationInput): Promise<Record<stri
     idempotencyKey: input.idempotencyKey,
     allowed: decision.allowed,
     reason: decision.reason,
+    result: decision.allowed ? undefined : 'denied',
   });
 
   if (!decision.allowed) {
@@ -288,12 +301,15 @@ async function createStage1Draft(input: DraftCreationInput): Promise<Record<stri
     reason: input.reason,
   }));
 
+  let agreementNumber: string;
   try {
-    await validateExpectedAgreement(
+    const agreement = await validateExpectedAgreement(
       input.client,
       input.options.expectedAgreementNumber,
     );
+    agreementNumber = agreement.agreementNumber;
     await writeAuditEvent({
+      ...auditIdentity(input.options),
       tool: input.tool,
       action: 'agreement_check',
       serviceId: 'rest',
@@ -303,9 +319,12 @@ async function createStage1Draft(input: DraftCreationInput): Promise<Record<stri
       allowed: true,
       reason: 'expected agreement verified',
       status: 'ok',
+      result: 'success',
+      agreementNumber,
     });
   } catch (error) {
     await writeAuditEvent({
+      ...auditIdentity(input.options),
       tool: input.tool,
       action: 'agreement_check',
       serviceId: 'rest',
@@ -315,6 +334,7 @@ async function createStage1Draft(input: DraftCreationInput): Promise<Record<stri
       allowed: false,
       reason: 'expected agreement validation failed',
       status: 'error',
+      result: 'failure',
       error: formatUnknownError(error),
     });
     throw error;
@@ -334,6 +354,7 @@ async function createStage1Draft(input: DraftCreationInput): Promise<Record<stri
     const reference = input.reference ?? extractFirstField(response, ['reference', 'self']);
 
     await writeAuditEvent({
+      ...auditIdentity(input.options),
       tool: input.tool,
       action: 'create',
       serviceId: input.serviceId,
@@ -344,6 +365,13 @@ async function createStage1Draft(input: DraftCreationInput): Promise<Record<stri
       allowed: true,
       reason: decision.reason,
       status: 'ok',
+      result: 'success',
+      policyResult: 'allowed',
+      economicHttpStatus: 201,
+      durationMs: Date.now() - startedAt,
+      agreementNumber,
+      draftNumber: number,
+      draftReference: reference,
     });
 
     return {
@@ -355,6 +383,7 @@ async function createStage1Draft(input: DraftCreationInput): Promise<Record<stri
     };
   } catch (error) {
     await writeAuditEvent({
+      ...auditIdentity(input.options),
       tool: input.tool,
       action: 'create',
       serviceId: input.serviceId,
@@ -365,7 +394,13 @@ async function createStage1Draft(input: DraftCreationInput): Promise<Record<stri
       allowed: true,
       reason: decision.reason,
       status: 'error',
+      result: 'failure',
       error: formatUnknownError(error),
+      errorCategory: categorizeError(error),
+      policyResult: 'allowed',
+      economicHttpStatus: error instanceof EconomicHttpError ? error.status : undefined,
+      durationMs: Date.now() - startedAt,
+      agreementNumber,
     });
     throw error;
   }
@@ -408,8 +443,36 @@ function registerTool(
   }
 
   server.registerTool(name, definition, async (...args: any[]) => {
-    await options.authorize?.(name);
-    return handler(...args);
+    const startedAt = Date.now();
+    try {
+      await options.authorize?.(name);
+      const result = await handler(...args);
+      const draft = isStage1WriteTool(name) ? extractDraftResult(result) : undefined;
+      options.logger?.log({
+        requestId: options.requestContext?.requestId ?? 'stdio',
+        principal: options.requestContext?.principal,
+        tool: name,
+        operationCategory: operationCategory(name),
+        policyResult: 'allowed',
+        economicHttpStatus: economicStatusForResult(name),
+        durationMs: Date.now() - startedAt,
+        draftNumber: draft?.number,
+        draftReference: draft?.reference,
+      });
+      return result;
+    } catch (error) {
+      options.logger?.log({
+        requestId: options.requestContext?.requestId ?? 'stdio',
+        principal: options.requestContext?.principal,
+        tool: name,
+        operationCategory: operationCategory(name),
+        policyResult: categorizeError(error) === 'policy_denied' ? 'denied' : 'not_applicable',
+        economicHttpStatus: error instanceof EconomicHttpError ? error.status : undefined,
+        durationMs: Date.now() - startedAt,
+        error,
+      });
+      throw error;
+    }
   });
 }
 
@@ -445,6 +508,37 @@ function extractFirstField(value: unknown, fields: string[]): string | number | 
   }
 
   return undefined;
+}
+
+function auditIdentity(options: RegisterStage1ToolsOptions) {
+  const principal = options.requestContext?.principal;
+  return {
+    requestId: options.requestContext?.requestId,
+    tenantId: principal?.tenantId,
+    userOid: principal?.userOid,
+    username: principal?.username,
+    role: principal ? primaryEconomicRole(principal) : undefined,
+  };
+}
+
+function extractDraftResult(result: unknown): { number?: string | number; reference?: string | number } | undefined {
+  if (!isRecord(result) || !Array.isArray(result.content)) return undefined;
+  const block = result.content[0];
+  if (!isRecord(block) || typeof block.text !== 'string') return undefined;
+  try {
+    const parsed = JSON.parse(block.text) as unknown;
+    if (!isRecord(parsed)) return undefined;
+    return {
+      ...(typeof parsed.number === 'string' || typeof parsed.number === 'number' ? { number: parsed.number } : {}),
+      ...(typeof parsed.reference === 'string' || typeof parsed.reference === 'number' ? { reference: parsed.reference } : {}),
+    };
+  } catch {
+    return undefined;
+  }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 function jsonToolResult(data: unknown) {

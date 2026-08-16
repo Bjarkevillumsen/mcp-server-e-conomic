@@ -1,7 +1,7 @@
 const SECRET_PATTERNS = [
   /X-AppSecretToken:\s*[^,\s}]+/gi,
   /X-AgreementGrantToken:\s*[^,\s}]+/gi,
-  /(appSecretToken|agreementGrantToken|ECONOMIC_APP_SECRET_TOKEN|ECONOMIC_AGREEMENT_GRANT_TOKEN)["']?\s*[:=]\s*["']?[^"',\s}]+/gi,
+  /(appSecretToken|agreementGrantToken|ECONOMIC_APP_SECRET_TOKEN|ECONOMIC_AGREEMENT_GRANT_TOKEN|access[_-]?token|authorization)["']?\s*[:=]\s*["']?[^"',\s}]+/gi,
 ];
 
 export interface EconomicErrorPayload {
@@ -48,11 +48,15 @@ export function formatUnknownError(error: unknown): string {
 }
 
 export function redactSecrets(value: string): string {
+  const withoutBearerTokens = value.replace(
+    /Bearer\s+[A-Za-z0-9._~+\/-]+/gi,
+    'Bearer [REDACTED]',
+  );
   return SECRET_PATTERNS.reduce((current, pattern) => current.replace(pattern, match => {
     const separator = match.includes(':') ? ':' : '=';
     const key = match.split(separator)[0]?.trim() ?? 'secret';
     return `${key}${separator} [REDACTED]`;
-  }), value);
+  }), withoutBearerTokens);
 }
 
 function formatEconomicHttpError(input: {

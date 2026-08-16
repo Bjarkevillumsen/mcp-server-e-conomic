@@ -34,6 +34,15 @@ describe('Stage 1 MCP profile', () => {
     });
   });
 
+  it('runs the authorization hook for every tool invocation', async () => {
+    const authorize = vi.fn();
+    await withStage1Client(async mcpClient => {
+      const result = await mcpClient.callTool({ name: 'stage1_check_connection', arguments: {} });
+      expect(result.isError).not.toBe(true);
+      expect(authorize).toHaveBeenCalledExactlyOnceWith('stage1_check_connection');
+    }, async () => Response.json({ ok: true }), authorize);
+  });
+
   it('performs bounded catalog reads and caps returned records', async () => {
     const requests: Request[] = [];
     const fetchMock = vi.fn(async (input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
@@ -192,13 +201,14 @@ describe('Stage 1 MCP profile', () => {
 async function withStage1Client(
   action: (client: Client) => Promise<void>,
   fetchImpl: typeof fetch = async () => Response.json({}),
+  authorize?: (toolName: (typeof STAGE1_ALLOWED_TOOLS)[number]) => void | Promise<void>,
 ): Promise<void> {
   const economicClient = new EconomicClient({
     appSecretToken: 'app',
     agreementGrantToken: 'grant',
     fetchImpl,
   });
-  const server = createStage1Server({ client: economicClient });
+  const server = createStage1Server({ client: economicClient, authorize });
   const client = new Client({ name: 'stage1-test', version: '1.0.0' });
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
   await server.connect(serverTransport);
