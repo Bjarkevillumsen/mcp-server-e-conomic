@@ -65,18 +65,28 @@ describe('Stage 1 protected HTTP resource', () => {
   it('publishes tenant-specific OAuth protected-resource metadata', async () => {
     const response = await fetch(`${baseUrl}/.well-known/oauth-protected-resource`);
     expect(response.status).toBe(200);
-    expect(await response.json()).toEqual({
-      resource: 'https://mcp.example.test',
+    const expectedMetadata = {
+      resource: 'https://mcp.example.test/mcp',
       authorization_servers: [entraIssuer(entra.tenantId)],
-      scopes_supported: ['Mcp.Access'],
+      scopes_supported: [`api://${entra.apiClientId}/Mcp.Access`],
       bearer_methods_supported: ['header'],
-    });
+    };
+    expect(await response.json()).toEqual(expectedMetadata);
+
+    const pathSpecific = await fetch(
+      `${baseUrl}/.well-known/oauth-protected-resource/mcp`,
+    );
+    expect(pathSpecific.status).toBe(200);
+    expect(await pathSpecific.json()).toEqual(expectedMetadata);
   });
 
   it('returns 401 for missing and invalid bearer tokens', async () => {
     const missing = await postMcp(mcpRequest('tools/list'));
     expect(missing.status).toBe(401);
     expect(missing.headers.get('www-authenticate')).toContain('oauth-protected-resource');
+    expect(missing.headers.get('www-authenticate')).toContain(
+      `scope="api://${entra.apiClientId}/Mcp.Access"`,
+    );
 
     const invalid = await postMcp(mcpRequest('tools/list'), 'not-a-jwt');
     expect(invalid.status).toBe(401);
