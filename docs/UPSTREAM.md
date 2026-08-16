@@ -42,8 +42,9 @@ small and covered by regression tests.
 - `npm run build`: passed
 - `npm audit --omit=dev`: failed with 6 inherited production advisories
 
-The audit findings are detailed in `docs/SECURITY-ASSUMPTIONS.md` and must be
-resolved before release.
+The inherited audit findings and the Stage 1 dependency-lock remediation are
+detailed in `docs/SECURITY-ASSUMPTIONS.md`. The current Stage 1 production audit
+passes with zero known vulnerabilities.
 
 ## Checking for updates
 

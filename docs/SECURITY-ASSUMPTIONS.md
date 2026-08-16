@@ -50,7 +50,7 @@ trail records write attempts without full business payloads.
 
 The health endpoint returns only `{ "status": "ok" }`.
 
-## Inherited baseline findings
+## Inherited baseline findings and remediation
 
 At pinned upstream commit `ee3feef4d9f8fcbcef92357e43f582bc311b34c7`,
 `npm audit --omit=dev` reports six production dependency advisories: three high,
@@ -58,8 +58,12 @@ two moderate, and one low. The affected transitive packages include
 `ip-address`, `fast-uri`, `hono`, `@hono/node-server`, `express-rate-limit`, and
 `body-parser`. The untouched upstream typecheck, 67 tests, and build pass.
 
-The dependency audit must be remediated and rerun before the Stage 1 release is
-accepted. No live credentials or writes are used in CI.
+The Stage 1 dependency lock now pins remediated versions of the affected
+transitive packages. After a clean install, `npm audit --omit=dev` reports zero
+production vulnerabilities and the complete Stage 1 security suite passes.
+These overrides are a small security deviation from the pinned baseline and
+must be reviewed again whenever upstream dependencies are advanced. No live
+credentials or writes are used in CI.
 
 ## Residual risks
 

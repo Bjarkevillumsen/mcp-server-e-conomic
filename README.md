@@ -9,6 +9,19 @@ typed, documented, read-first, policy-aware, credential-sane, and audit-friendly
 > describe what this server talks to. You need your own e-conomic credentials, and
 > use of the e-conomic APIs is subject to Visma/e-conomic's own terms.
 
+## Customer Stage 1 profile
+
+This fork adds a production-hardened, localhost-only Stage 1 profile for an
+isolated Windows Server. It advertises bounded reads plus exactly two unbooked
+draft writes, validates single-tenant Microsoft Entra tokens and roles, and is
+packaged for WinSW and Cloudflare Tunnel. Start with
+[`docs/STAGE1-SCOPE.md`](docs/STAGE1-SCOPE.md),
+[`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md), and
+[`docs/WINDOWS-DEPLOYMENT.md`](docs/WINDOWS-DEPLOYMENT.md).
+
+The Stage 1 production entry point is `economic-mcp-stage1`. The upstream server
+remains in source for attribution and reuse, but is not the production profile.
+
 ## Scope
 
 The server exposes e-conomic through three layers:

@@ -1,8 +1,11 @@
 node_modules
 dist
+artifacts
 coverage
 .env
 .env.*
 !.env.example
+!config/stage1.env.example
 *.log
+*.zip
 .DS_Store
