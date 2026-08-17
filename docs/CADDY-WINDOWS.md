@@ -5,6 +5,12 @@ fixed public IPv4 address terminates on the customer's firewall. Caddy handles
 public TLS; EconomicMcp still validates every Entra token and remains bound only
 to `127.0.0.1:3000`.
 
+The Caddy profile adds HSTS, nosniff, clickjacking, referrer, and browser
+permissions headers. The application independently rate-limits `/mcp` requests
+per forwarded client IP; it accepts `X-Forwarded-For` only when the direct peer
+is loopback. Production defaults are 600 requests per 60 seconds and can be
+tuned with `MCP_RATE_LIMIT_MAX_REQUESTS` and `MCP_RATE_LIMIT_WINDOW_MS`.
+
 ## Fixed deployment topology
 
 ```text

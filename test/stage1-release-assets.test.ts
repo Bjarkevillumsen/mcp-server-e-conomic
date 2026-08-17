@@ -24,6 +24,7 @@ const requiredAssets = [
   'scripts/windows/test-entra.ps1',
   'scripts/windows/set-company.ps1',
   'scripts/windows/import-companies.ps1',
+  'scripts/windows/readiness-check.ps1',
   'docs/ARCHITECTURE.md',
   'docs/NETWORK-DESIGN.md',
   'docs/ENTRA-ID-SETUP.md',
@@ -63,6 +64,16 @@ describe('Stage 1 release assets', () => {
     expect(ci).not.toContain('ECONOMIC_ALLOW_LIVE_WRITE_TESTS');
   });
 
+  it('monitors the production endpoint from outside the Windows host', () => {
+    const monitor = readFileSync('.github/workflows/production-monitor.yml', 'utf8');
+    expect(monitor).toContain('https://mcp.squaremeter.dk');
+    expect(monitor).toContain("cron: '*/15 * * * *'");
+    expect(monitor).toContain("test \"$auth_status\" = '401'");
+    expect(monitor).toContain("test \"$cors_status\" = '403'");
+    expect(monitor).toContain('strict-transport-security');
+    expect(monitor).toContain('x-content-type-options');
+  });
+
   it('bulk-imports companies with one shared app secret and no secret output', () => {
     const importer = readFileSync('scripts/windows/import-companies.ps1', 'utf8');
     expect(importer).toContain('[string]$ReuseAppSecretFromCompanyId');
@@ -79,6 +90,8 @@ describe('Stage 1 release assets', () => {
     expect(caddyfile).toContain('reverse_proxy 127.0.0.1:3000');
     expect(caddyfile).toContain('admin 127.0.0.1:2019');
     expect(caddyfile).toContain('auto_https disable_redirects');
+    expect(caddyfile).toContain('Strict-Transport-Security "max-age=31536000"');
+    expect(caddyfile).toContain('X-Content-Type-Options "nosniff"');
     expect(caddyfile).not.toContain('log_credentials');
   });
 

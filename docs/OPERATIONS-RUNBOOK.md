@@ -12,6 +12,22 @@
   attempt. Never copy tokens or full accounting data into incident systems.
 - Monitor disk usage in logs/audit/releases and retain audit data according to
   customer policy.
+- Confirm the scheduled `Production endpoint monitor` GitHub workflow remains
+  enabled and green. It checks the endpoint from outside the server every 15
+  minutes, including OAuth metadata, 401, CORS denial, and security headers.
+
+Run the consolidated, non-mutating readiness check after every deployment:
+
+```powershell
+& 'C:\Program Files\EconomicMcp\scripts\windows\readiness-check.ps1' `
+  -ProtectedBackupPath '\\backup-host\economic-mcp$'
+```
+
+The backup location must be outside both EconomicMcp roots, access-controlled,
+encrypted in transit and at rest, and contain a separately managed protected
+backup of configuration/credentials plus the release manifest. The readiness
+check validates freshness but deliberately does not copy secrets to an unknown
+destination. Perform and document a restore test before production sign-off.
 
 ## Start, stop, and diagnostics
 

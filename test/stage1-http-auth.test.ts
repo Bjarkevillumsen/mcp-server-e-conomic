@@ -24,6 +24,8 @@ const config: Stage1StartupConfig = {
   port: 3000,
   maxBodyBytes: 1_024,
   requestTimeoutMs: 5_000,
+  rateLimitMaxRequests: 600,
+  rateLimitWindowMs: 60_000,
   allowedOrigins: ['https://client.example.test'],
   publicBaseUrl: 'https://mcp.example.test',
   entra,
@@ -67,6 +69,9 @@ describe('Stage 1 protected HTTP resource', () => {
     const response = await fetch(`${baseUrl}/healthz`);
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({ status: 'ok' });
+    expect(response.headers.get('strict-transport-security')).toBe('max-age=31536000');
+    expect(response.headers.get('x-content-type-options')).toBe('nosniff');
+    expect(response.headers.get('x-frame-options')).toBe('DENY');
   });
 
   it('publishes tenant-specific OAuth protected-resource metadata', async () => {
@@ -200,6 +205,35 @@ describe('Stage 1 protected HTTP resource', () => {
       expect(text).not.toContain('stack');
     } finally {
       await new Promise<void>((resolve, reject) => failingServer.close(error => error ? reject(error) : resolve()));
+    }
+  });
+
+  it('rate limits repeated MCP requests and returns Retry-After', async () => {
+    const limitedServer = createStage1HttpServer({
+      config: { ...config, rateLimitMaxRequests: 2, rateLimitWindowMs: 60_000 },
+      tokenValidator,
+      logger: new Stage1TechnicalLogger(() => undefined),
+    });
+    await new Promise<void>((resolve, reject) => {
+      limitedServer.once('error', reject);
+      limitedServer.listen(0, '127.0.0.1', () => resolve());
+    });
+    try {
+      const address = limitedServer.address() as AddressInfo;
+      const url = `http://127.0.0.1:${address.port}/mcp`;
+      const request = () => fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(mcpRequest('tools/list')),
+      });
+      expect((await request()).status).toBe(401);
+      expect((await request()).status).toBe(401);
+      const blocked = await request();
+      expect(blocked.status).toBe(429);
+      expect(blocked.headers.get('retry-after')).toBe('60');
+      expect(await blocked.json()).toEqual({ error: 'Too many requests' });
+    } finally {
+      await new Promise<void>((resolve, reject) => limitedServer.close(error => error ? reject(error) : resolve()));
     }
   });
 });

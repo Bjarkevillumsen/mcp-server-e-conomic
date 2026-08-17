@@ -12,6 +12,8 @@ export interface Stage1StartupConfig {
   port: number;
   maxBodyBytes: number;
   requestTimeoutMs: number;
+  rateLimitMaxRequests: number;
+  rateLimitWindowMs: number;
   allowedOrigins: string[];
   publicBaseUrl?: string;
   entra: EntraConfig;
@@ -40,6 +42,20 @@ export function validateStage1Startup(
     1_000,
     120_000,
     'MCP_REQUEST_TIMEOUT_MS',
+  );
+  const rateLimitMaxRequests = boundedInteger(
+    environment.MCP_RATE_LIMIT_MAX_REQUESTS,
+    600,
+    1,
+    10_000,
+    'MCP_RATE_LIMIT_MAX_REQUESTS',
+  );
+  const rateLimitWindowMs = boundedInteger(
+    environment.MCP_RATE_LIMIT_WINDOW_MS,
+    60_000,
+    1_000,
+    3_600_000,
+    'MCP_RATE_LIMIT_WINDOW_MS',
   );
 
   if (environment.ECONOMIC_ENABLE_BOOKING === 'true') {
@@ -114,6 +130,8 @@ export function validateStage1Startup(
     port,
     maxBodyBytes,
     requestTimeoutMs,
+    rateLimitMaxRequests,
+    rateLimitWindowMs,
     allowedOrigins,
     ...(publicBaseUrl ? { publicBaseUrl } : {}),
     entra,

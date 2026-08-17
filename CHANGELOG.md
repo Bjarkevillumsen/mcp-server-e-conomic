@@ -32,6 +32,12 @@ Conditional booking (booking duty) — booking stays denied by default:
 
 ## Unreleased
 
+- Hardened the public Stage 1 HTTP surface with HSTS, nosniff/frame/referrer/
+  permissions headers and a bounded, configurable per-client fixed-window rate
+  limit that trusts forwarded client addresses only from the loopback proxy.
+- Added an off-host GitHub Actions production monitor and a non-mutating Windows
+  readiness check covering services, listeners, health, fail-closed settings,
+  registry bounds, and optional protected backup freshness.
 - Added an atomic semicolon-delimited CSV importer for bulk onboarding. It can
   reuse the protected App Secret Token from an existing company, validates every
   Agreement Grant Token against e-conomic before changing the complete 1-100

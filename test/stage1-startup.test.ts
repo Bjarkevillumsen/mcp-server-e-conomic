@@ -6,6 +6,8 @@ describe('Stage 1 production startup validation', () => {
     expect(validateStage1Startup(validEnvironment(), path => path === 'C:\\policy.json')).toMatchObject({
       production: true,
       host: '127.0.0.1',
+      rateLimitMaxRequests: 600,
+      rateLimitWindowMs: 60_000,
       companies: [{ agreementNumber: '1382005' }],
       entra: { requiredScope: 'Mcp.Access' },
     });
@@ -25,6 +27,7 @@ describe('Stage 1 production startup validation', () => {
     ['CORS wildcard', (env: NodeJS.ProcessEnv) => { env.MCP_ALLOW_ANY_ORIGIN = 'true'; }],
     ['REST credential destination', (env: NodeJS.ProcessEnv) => { env.ECONOMIC_BASE_URL_REST = 'https://evil.example'; }],
     ['OpenAPI credential destination', (env: NodeJS.ProcessEnv) => { env.ECONOMIC_BASE_URL_OPENAPI = 'https://evil.example'; }],
+    ['rate limit', (env: NodeJS.ProcessEnv) => { env.MCP_RATE_LIMIT_MAX_REQUESTS = '0'; }],
   ])('fails closed when %s is unsafe or missing', (_label, mutate) => {
     const env = validEnvironment();
     mutate(env);
