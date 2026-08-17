@@ -53,6 +53,7 @@ if ($LASTEXITCODE -ne 0) { throw 'Caddy rejected the generated configuration.' }
 $serviceIdentity = 'NT AUTHORITY\LOCAL SERVICE'
 & icacls.exe $installRoot /inheritance:e /grant:r "${serviceIdentity}:(OI)(CI)RX" /T /C | Out-Null
 & icacls.exe (Join-Path $dataRoot 'config') /inheritance:r /grant:r 'SYSTEM:(OI)(CI)F' 'BUILTIN\Administrators:(OI)(CI)F' "${serviceIdentity}:(OI)(CI)RX" /T /C | Out-Null
+& icacls.exe $targetCaddyfile /inheritance:r /grant:r 'SYSTEM:F' 'BUILTIN\Administrators:F' "${serviceIdentity}:R" | Out-Null
 foreach ($writable in @('data','logs')) {
     & icacls.exe (Join-Path $dataRoot $writable) /inheritance:r /grant:r 'SYSTEM:(OI)(CI)F' 'BUILTIN\Administrators:(OI)(CI)F' "${serviceIdentity}:(OI)(CI)M" /T /C | Out-Null
 }

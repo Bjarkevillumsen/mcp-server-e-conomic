@@ -6,7 +6,7 @@
 | --- | --- |
 | Status | **NOT RUN — live credentials and approved business payloads were not provided** |
 | Test date/time | Not run |
-| Application version | Stage 1 `0.1.1` candidate |
+| Application version | Stage 1 `0.1.2` candidate |
 | Upstream repository | `borgels/mcp-server-e-conomic` |
 | Upstream commit | `ee3feef4d9f8fcbcef92357e43f582bc311b34c7` |
 | Stage 1 repository commit | Pending PR 4 commit/tag |
