@@ -8,7 +8,10 @@ import type { EconomicClient, QueryValue } from '../economic/client.js';
 import { callEndpoint } from '../economic/endpoints.js';
 
 export const STAGE1_DEFAULT_PAGE_SIZE = 100;
-export const STAGE1_MAX_PAGE_SIZE = 200;
+// e-conomic paged endpoints (including Booked Entries)
+// accept at most 100 records. Keeping one truthful public limit prevents the
+// model from wasting a request on a value that upstream will reject.
+export const STAGE1_MAX_PAGE_SIZE = 100;
 export const STAGE1_MAX_TOTAL_RECORDS = 500;
 
 export const STAGE1_READ_SERVICE_IDS = ECONOMIC_SERVICES
@@ -35,7 +38,9 @@ export interface Stage1ReadResult {
     pageSize: number;
     maxRecords: number;
     returnedRecords: number;
+    pagesFetched: number;
     truncated: boolean;
+    nextPage?: number;
     nextCursor?: string;
   };
 }
@@ -53,38 +58,45 @@ export async function executeStage1Read(
   assertStage1CatalogRead(input.serviceId, pathTemplate);
 
   const service = findService(input.serviceId);
-  const query: Record<string, QueryValue> = {};
-  if (input.filter) query.filter = input.filter;
-  if (input.sort) query.sort = input.sort;
-  if (input.cursor) query.cursor = input.cursor;
+  const baseQuery: Record<string, QueryValue> = {};
+  if (input.filter) baseQuery.filter = input.filter;
+  if (input.sort) baseQuery.sort = input.sort;
+  if (input.cursor) baseQuery.cursor = input.cursor;
 
   const isCollectionRead =
     input.number === undefined &&
     !pathTemplate.includes('{') &&
     !/(?:\/count|\/pdf)$/i.test(pathTemplate);
-  if (isCollectionRead) {
-    if (service.surface === 'rest') {
-      query.pagesize = effectivePageSize;
-      query.skippages = clampInteger(input.page, 0, 0, 1_000_000);
-    } else {
-      query.pageSize = effectivePageSize;
-    }
-  }
-
   const pathParams =
     input.number === undefined
       ? input.pathParams
       : { ...(input.pathParams ?? {}), number: input.number };
 
-  const response = await callEndpoint(client, {
+  if (!isCollectionRead) {
+    const response = await callEndpoint(client, {
+      serviceId: input.serviceId,
+      method: 'GET',
+      pathTemplate,
+      pathParams,
+      query: baseQuery,
+    });
+    return boundSingleResponse(response, effectivePageSize, maxRecords);
+  }
+
+  if (input.cursor) {
+    throw new Error('Cursor paging is not accepted by the paged dataset tools. Use page/maxRecords; the server auto-pages safely.');
+  }
+
+  return readCollectionPages(client, {
     serviceId: input.serviceId,
-    method: 'GET',
     pathTemplate,
     pathParams,
-    query,
+    baseQuery,
+    surface: service.surface,
+    startPage: clampInteger(input.page, 0, 0, 100),
+    pageSize: effectivePageSize,
+    maxRecords,
   });
-
-  return boundReadResponse(response, effectivePageSize, maxRecords);
 }
 
 export function assertStage1CatalogRead(serviceId: string, pathTemplate: string): void {
@@ -132,49 +144,140 @@ function assertStage1Service(serviceId: string): void {
   }
 }
 
-function boundReadResponse(
+function boundSingleResponse(
   response: unknown,
   pageSize: number,
   maxRecords: number,
 ): Stage1ReadResult {
-  let data = response;
-  let returnedRecords = isRecord(response) || Array.isArray(response) ? 1 : 0;
-  let truncated = false;
+  return {
+    data: response,
+    page: {
+      pageSize,
+      maxRecords,
+      returnedRecords: response === null || response === undefined ? 0 : 1,
+      pagesFetched: 1,
+      truncated: false,
+    },
+  };
+}
+
+interface CollectionReadOptions {
+  serviceId: string;
+  pathTemplate: string;
+  pathParams?: Record<string, string | number>;
+  baseQuery: Record<string, QueryValue>;
+  surface: 'rest' | 'openapi';
+  startPage: number;
+  pageSize: number;
+  maxRecords: number;
+}
+
+async function readCollectionPages(
+  client: EconomicClient,
+  options: CollectionReadOptions,
+): Promise<Stage1ReadResult> {
+  const records: unknown[] = [];
+  let firstResponse: unknown;
+  let collectionKey: 'collection' | 'items' | undefined;
+  let pagesFetched = 0;
+  let hasMore = false;
   let nextCursor: string | undefined;
 
-  if (Array.isArray(response)) {
-    truncated = response.length > maxRecords;
-    data = response.slice(0, maxRecords);
-    returnedRecords = Math.min(response.length, maxRecords);
-  } else if (isRecord(response)) {
-    const collectionKey = Array.isArray(response.collection)
-      ? 'collection'
-      : Array.isArray(response.items)
-        ? 'items'
-        : undefined;
-
-    if (collectionKey) {
-      const collection = response[collectionKey] as unknown[];
-      truncated = collection.length > maxRecords;
-      returnedRecords = Math.min(collection.length, maxRecords);
-      data = { ...response, [collectionKey]: collection.slice(0, maxRecords) };
+  const maximumPages = Math.min(
+    Math.ceil(options.maxRecords / options.pageSize),
+    101 - options.startPage,
+  );
+  for (let offset = 0; offset < maximumPages; offset += 1) {
+    const pageNumber = options.startPage + offset;
+    const query = { ...options.baseQuery };
+    if (options.surface === 'rest') {
+      query.pagesize = options.pageSize;
+      query.skippages = pageNumber;
+    } else {
+      query.pageSize = options.pageSize;
+      query.skipPages = pageNumber;
     }
 
-    if (typeof response.cursor === 'string' && response.cursor) {
-      nextCursor = response.cursor;
+    const response = await callEndpoint(client, {
+      serviceId: options.serviceId,
+      method: 'GET',
+      pathTemplate: options.pathTemplate,
+      pathParams: options.pathParams,
+      query,
+    });
+    firstResponse ??= response;
+    pagesFetched += 1;
+
+    const page = extractCollectionPage(response);
+    collectionKey ??= page.collectionKey;
+    const remaining = options.maxRecords - records.length;
+    records.push(...page.records.slice(0, remaining));
+    nextCursor = page.nextCursor;
+
+    const pageOverflowed = page.records.length > remaining;
+    const pageWasFull = page.records.length >= options.pageSize;
+    hasMore = pageOverflowed || pageWasFull || Boolean(page.nextCursor);
+    if (pageOverflowed || records.length >= options.maxRecords || !pageWasFull) {
+      break;
     }
   }
+
+  const data = rebuildCollectionResponse(firstResponse, collectionKey, records);
+  const truncated = records.length >= options.maxRecords && hasMore;
+  const nextPage = truncated ? options.startPage + pagesFetched : undefined;
 
   return {
     data,
     page: {
-      pageSize,
-      maxRecords,
-      returnedRecords,
+      pageSize: options.pageSize,
+      maxRecords: options.maxRecords,
+      returnedRecords: records.length,
+      pagesFetched,
       truncated,
+      ...(nextPage !== undefined ? { nextPage } : {}),
       ...(nextCursor ? { nextCursor } : {}),
     },
   };
+}
+
+function extractCollectionPage(response: unknown): {
+  records: unknown[];
+  collectionKey?: 'collection' | 'items';
+  nextCursor?: string;
+} {
+  if (Array.isArray(response)) {
+    return { records: response };
+  }
+  if (!isRecord(response)) {
+    throw new Error('e-conomic returned an unexpected non-collection response for a paged dataset.');
+  }
+  if (Array.isArray(response.collection)) {
+    return {
+      records: response.collection,
+      collectionKey: 'collection',
+      nextCursor: typeof response.cursor === 'string' && response.cursor ? response.cursor : undefined,
+    };
+  }
+  if (Array.isArray(response.items)) {
+    return {
+      records: response.items,
+      collectionKey: 'items',
+      nextCursor: typeof response.cursor === 'string' && response.cursor ? response.cursor : undefined,
+    };
+  }
+  throw new Error('e-conomic returned an object without a collection/items array for a paged dataset.');
+}
+
+function rebuildCollectionResponse(
+  firstResponse: unknown,
+  collectionKey: 'collection' | 'items' | undefined,
+  records: unknown[],
+): unknown {
+  if (Array.isArray(firstResponse)) return records;
+  if (isRecord(firstResponse) && collectionKey) {
+    return { ...firstResponse, [collectionKey]: records };
+  }
+  return records;
 }
 
 function clampInteger(value: number | undefined, fallback: number, min: number, max: number): number {

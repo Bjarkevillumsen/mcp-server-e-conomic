@@ -16,7 +16,7 @@ isolated Windows Server. It advertises bounded reads plus exactly two unbooked
 draft writes, validates single-tenant Microsoft Entra tokens and roles, and is
 able to isolate up to 100 e-conomic agreements behind one MCP connector. Every
 Stage 1 business tool requires a `companyId` returned by
-`stage1_list_companies`; each company has its own protected credential pair and
+`economic_list_companies`; each company has its own protected credential pair and
 optional Entra user-object ACL. It is
 packaged for WinSW and either Cloudflare Tunnel or the checksum-pinned Caddy
 HTTPS reverse proxy. Start with
@@ -26,6 +26,12 @@ HTTPS reverse proxy. Start with
 
 The Stage 1 production entry point is `economic-mcp-stage1`. The upstream server
 remains in source for attribution and reuse, but is not the production profile.
+
+The production profile advertises seven task-oriented tools: company listing and
+context, dataset discovery, validated querying, cross-company supplier
+transactions, and the two unbooked draft creators. The query surface uses a
+dataset enum and structured filters; it does not expose raw resource names,
+URLs, or filter strings to the AI client.
 
 ## Scope
 

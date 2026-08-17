@@ -1,23 +1,14 @@
 export const STAGE1_READ_TOOLS = [
-  'stage1_list_companies',
-  'stage1_check_connection',
-  'stage1_get_company_context',
-  'stage1_search_entities',
-  'stage1_get_entity',
-  'stage1_get_customer_overview',
-  'stage1_get_supplier_overview',
-  'stage1_get_product_overview',
-  'stage1_get_accounting_entries',
-  'stage1_get_sales_documents',
-  'stage1_get_project_overview',
-  'stage1_get_document',
-  'stage1_get_report',
-  'stage1_read_economic',
+  'economic_list_companies',
+  'economic_get_company_context',
+  'economic_describe_data',
+  'economic_query',
+  'economic_supplier_transactions',
 ] as const;
 
 export const STAGE1_WRITE_TOOLS = [
-  'stage1_create_sales_invoice_draft',
-  'stage1_create_journal_draft_entry',
+  'economic_create_sales_invoice_draft',
+  'economic_create_journal_draft_entry',
 ] as const;
 
 export const STAGE1_ALLOWED_TOOLS = [

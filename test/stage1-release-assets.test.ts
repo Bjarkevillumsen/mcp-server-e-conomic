@@ -85,6 +85,26 @@ describe('Stage 1 release assets', () => {
     expect(importer).not.toContain('Write-Host $agreementGrantToken');
   });
 
+  it('reads existing company registries explicitly as UTF-8 in Windows PowerShell', () => {
+    for (const path of ['scripts/windows/import-companies.ps1', 'scripts/windows/set-company.ps1']) {
+      const script = readFileSync(path, 'utf8');
+      expect(script).toMatch(/\[IO\.File\]::ReadAllText\(\s*\$registryPath,\s*\[Text\.UTF8Encoding\]::new\(\$false\)\s*\)/);
+      expect(script).not.toMatch(/Get-Content\s+-LiteralPath\s+\$registryPath\s+-Raw\s+\|\s+ConvertFrom-Json/);
+    }
+  });
+
+  it('migrates and rolls back the two v0.3 policy capability names during update', () => {
+    const updater = readFileSync('scripts/windows/update.ps1', 'utf8');
+    expect(updater).toContain("'stage1_create_sales_invoice_draft' = 'economic_create_sales_invoice_draft'");
+    expect(updater).toContain("'stage1_create_journal_draft_entry' = 'economic_create_journal_draft_entry'");
+    expect(updater).toContain('Update-Stage1V030PolicyNames -Path $policyPath');
+    expect(updater).toContain('Copy-Item -LiteralPath $policyPath -Destination (Join-Path $backupRoot $policyBackupName)');
+    expect(updater).toContain('Copy-Item -LiteralPath $policyBackup -Destination $policyPath');
+    const common = readFileSync('scripts/windows/Common.ps1', 'utf8');
+    expect(common).toContain("Join-Path $backupRoot 'economic-policy.stage1.json'");
+    expect(common).toContain("Join-Path $resolvedBackup 'economic-policy.stage1.json'");
+  });
+
   it('keeps the Caddy origin loopback-only and the admin endpoint local', () => {
     const caddyfile = readFileSync('config/Caddyfile.example', 'utf8');
     expect(caddyfile).toContain('reverse_proxy 127.0.0.1:3000');

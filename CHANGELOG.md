@@ -32,6 +32,18 @@ Conditional booking (booking duty) — booking stays denied by default:
 
 ## Unreleased
 
+- Replaced the 16 overlapping `stage1_*` tools with seven task-oriented
+  `economic_*` tools. Added dataset discovery, enum-backed resources, structured
+  field/operator validation, documented filter examples, truthful page-size 100
+  limits, and bounded auto-paging to 500 records.
+- Added one supplier-and-period workflow that resolves each agreement's supplier
+  number and fans out across authorized companies with bounded concurrency,
+  explicit per-company outcome states, totals, and compact accounting rows.
+- Removed technical links, metadata, object versions, pagination URLs, pretty
+  printing, and repeated company blocks from read payloads to reduce Claude
+  round trips and token usage.
+- Fixed Windows PowerShell registry reads to use explicit UTF-8, preventing
+  Danish company names such as Sølvgade and Værnedamsvej from becoming mojibake.
 - Hardened the public Stage 1 HTTP surface with HSTS, nosniff/frame/referrer/
   permissions headers and a bounded, configurable per-client fixed-window rate
   limit that trusts forwarded client addresses only from the loopback proxy.
@@ -45,8 +57,8 @@ Conditional booking (booking duty) — booking stays denied by default:
   service health check fails.
 - Added a fail-closed multi-company Stage 1 registry for 1-100 e-conomic
   agreements, isolated credentials and expected agreement numbers per company,
-  per-company user ACLs, `stage1_list_companies`, mandatory `companyId` on every
-  business tool, company-tagged logs/audit, and a hidden-input Windows
+  per-company user ACLs, `economic_list_companies`, explicit company selection
+  on company-specific tools, company-tagged logs/audit, and a hidden-input Windows
   onboarding/rotation helper.
 - Fixed Claude/Entra OAuth interoperability for remote MCP: protected-resource
   metadata and `WWW-Authenticate` now advertise the public HTTPS MCP resource

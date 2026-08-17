@@ -19,7 +19,7 @@ export interface CreateStage1ServerOptions extends RegisterStage1ToolsOptions {
 export function createStage1Server(options: CreateStage1ServerOptions = {}): McpServer {
   const server = new McpServer({
     name: 'e-conomic-stage1',
-    version: '0.1.0',
+    version: '0.3.0',
   });
   const companyRegistry = options.companyRegistry ?? createCompanyRegistry(options);
   registerStage1Tools(server, companyRegistry, options);

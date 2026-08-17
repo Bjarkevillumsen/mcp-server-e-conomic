@@ -23,13 +23,15 @@ application. The Node process verifies Entra tokens itself.
 
 Every request crosses independent controls:
 
-1. The Stage 1 server registers only the 16 names in `STAGE1_ALLOWED_TOOLS`.
+1. The Stage 1 server registers only the seven task-oriented names in
+   `STAGE1_ALLOWED_TOOLS`.
 2. Signed, tenant-specific Entra claims and the requested tool are authorized on
    every invocation. `Economic.Reader` can read; `Economic.DraftCreator` can also
    call the two draft tools.
-3. `stage1_list_companies` filters the registry by Entra user object ID. Every
-   business tool requires an explicit `companyId`, then creates a client with
-   only that company's token pair.
+3. `economic_list_companies` filters the registry by Entra user object ID.
+   Company-specific tools create a client with only the selected company's token
+   pair. The supplier-period tool can perform a bounded four-company-at-a-time
+   fan-out, still using one isolated client/token pair per agreement.
 4. The Stage 1 policy permits only `POST /invoices/drafts` and
    `POST /draft-entries`; all other mutations remain denied even if another
    layer fails.
@@ -37,8 +39,11 @@ Every request crosses independent controls:
    registry entry's agreement number. Live acceptance is additionally locked to
    `1382005`.
 
-Reads are on demand, bounded, and catalog-validated. No accounting replica,
-vector database, webhook ingestion, or approval database is introduced.
+Reads are on demand, bounded, and dataset-validated. The public query schema uses
+dataset enums and structured filters; fixed mappings are compiled to the
+e-conomic filter DSL only after local field/operator/type validation. No
+accounting replica, vector database, webhook ingestion, or approval database is
+introduced.
 e-conomic remains the system of record and its draft UI is the human approval
 boundary.
 

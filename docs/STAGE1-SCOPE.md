@@ -19,37 +19,44 @@ a credential.
 
 The Stage 1 server will advertise exactly this allowlist:
 
-- `stage1_list_companies`
-- `stage1_check_connection`
-- `stage1_get_company_context`
-- `stage1_search_entities`
-- `stage1_get_entity`
-- `stage1_get_customer_overview`
-- `stage1_get_supplier_overview`
-- `stage1_get_product_overview`
-- `stage1_get_accounting_entries`
-- `stage1_get_sales_documents`
-- `stage1_get_project_overview`
-- `stage1_get_document`
-- `stage1_get_report`
-- `stage1_read_economic`
-- `stage1_create_sales_invoice_draft`
-- `stage1_create_journal_draft_entry`
+- `economic_list_companies`
+- `economic_get_company_context`
+- `economic_describe_data`
+- `economic_query`
+- `economic_supplier_transactions`
+- `economic_create_sales_invoice_draft`
+- `economic_create_journal_draft_entry`
 
 Read tools reuse the upstream client, catalog, schemas, endpoint validation,
 pagination behavior, and curated workflow implementations. Data is fetched on
 demand; Stage 1 does not synchronize or persist a copy of the accounting
 system.
 
-`stage1_list_companies` returns only companies allowed for the signed-in user.
-Every other tool requires one of the returned `companyId` values. Unknown,
+`economic_list_companies` returns only companies allowed for the signed-in user.
+Every company-specific tool requires one of the returned `companyId` values. Unknown,
 disabled, and unauthorized IDs fail with the same response so the registry
 cannot be enumerated. Results and audit events identify the selected company but
 never expose its credentials.
 
-`stage1_read_economic` is GET-only. It accepts a catalog service and known path
-template rather than a URL or method, and it enforces bounded pagination. It is
-not an unrestricted HTTP escape hatch.
+`economic_describe_data` lists the allowlisted dataset IDs and, for one selected
+dataset, its fixed upstream service/resource pair, valid fields, valid operators,
+sortable fields, and examples. `economic_query` is GET-only and accepts that
+dataset enum plus structured filters. Raw resources, paths, URLs, methods, and
+filter DSL strings are not accepted. Invalid field/operator/type combinations
+fail locally before an e-conomic request. Page size is 1-100 and the server can
+auto-page up to 500 records.
+
+`economic_supplier_transactions` resolves an exact supplier name independently
+inside each selected company and fetches that supplier's booked entries for an
+inclusive date range. With no company list it fans out over all authorized
+companies with bounded concurrency. Per-company `matched`, `no_matches`,
+`supplier_not_found`, and `error` states prevent missing data from being reported
+as a successful empty answer. A supplier number can only be used with one
+explicit company because numbers are agreement-specific.
+
+Read responses remove self links, pagination URLs, object versions, and metadata
+blocks. Company identity appears once per result group, not once per accounting
+row. Valid empty datasets explicitly return `matchStatus: no_matches`.
 
 ## Allowed mutations
 

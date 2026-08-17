@@ -65,7 +65,7 @@ Stop-Service EconomicMcp
 company-specific access, replace it with one or more Entra user object IDs.
 Running the same `CompanyId` rotates that company's token pair atomically.
 Agreement numbers and company IDs must be unique; the 101st company is rejected.
-After a change, call `stage1_list_companies`, then check the selected company's
+After a change, call `economic_list_companies`, then check the selected company's
 context. Do not use a draft write as a health test.
 
 ## Bulk-import companies sharing one App Secret
@@ -137,6 +137,10 @@ Follow `WINDOWS-DEPLOYMENT.md`: verify the tagged ZIP and manifest, update,
 health-check, test metadata/401/RBAC, perform safe reads, and inspect logs. Do not
 run live writes as an update smoke test. If health or security checks fail, use
 rollback and preserve the failed release/logs for investigation.
+
+Version 0.3 replaces the old `stage1_*` MCP tool contracts. After deploying it,
+refresh/reconnect the Claude custom connector and start a new Claude chat before
+acceptance testing so the client discovers the seven current `economic_*` tools.
 
 ## Incident containment
 

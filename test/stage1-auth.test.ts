@@ -81,25 +81,25 @@ describe('Stage 1 Entra RBAC', () => {
   };
 
   it('returns 403 semantics when scope or application role is missing', () => {
-    expect(() => authorizeStage1Principal({ ...basePrincipal, scopes: [] }, 'stage1_check_connection', config.requiredScope))
+    expect(() => authorizeStage1Principal({ ...basePrincipal, scopes: [] }, 'economic_get_company_context', config.requiredScope))
       .toThrow(AuthorizationError);
-    expect(() => authorizeStage1Principal({ ...basePrincipal, roles: [] }, 'stage1_check_connection', config.requiredScope))
+    expect(() => authorizeStage1Principal({ ...basePrincipal, roles: [] }, 'economic_get_company_context', config.requiredScope))
       .toThrow(AuthorizationError);
   });
 
   it('allows Reader reads and denies both draft writes', () => {
-    expect(() => authorizeStage1Principal(basePrincipal, 'stage1_get_company_context', config.requiredScope)).not.toThrow();
-    expect(() => authorizeStage1Principal(basePrincipal, 'stage1_create_sales_invoice_draft', config.requiredScope))
+    expect(() => authorizeStage1Principal(basePrincipal, 'economic_get_company_context', config.requiredScope)).not.toThrow();
+    expect(() => authorizeStage1Principal(basePrincipal, 'economic_create_sales_invoice_draft', config.requiredScope))
       .toThrow(AuthorizationError);
-    expect(() => authorizeStage1Principal(basePrincipal, 'stage1_create_journal_draft_entry', config.requiredScope))
+    expect(() => authorizeStage1Principal(basePrincipal, 'economic_create_journal_draft_entry', config.requiredScope))
       .toThrow(AuthorizationError);
   });
 
   it('allows DraftCreator reads and exactly the two approved drafts', () => {
     const creator = { ...basePrincipal, roles: [ECONOMIC_DRAFT_CREATOR_ROLE] };
-    expect(() => authorizeStage1Principal(creator, 'stage1_get_company_context', config.requiredScope)).not.toThrow();
-    expect(() => authorizeStage1Principal(creator, 'stage1_create_sales_invoice_draft', config.requiredScope)).not.toThrow();
-    expect(() => authorizeStage1Principal(creator, 'stage1_create_journal_draft_entry', config.requiredScope)).not.toThrow();
+    expect(() => authorizeStage1Principal(creator, 'economic_get_company_context', config.requiredScope)).not.toThrow();
+    expect(() => authorizeStage1Principal(creator, 'economic_create_sales_invoice_draft', config.requiredScope)).not.toThrow();
+    expect(() => authorizeStage1Principal(creator, 'economic_create_journal_draft_entry', config.requiredScope)).not.toThrow();
     expect(() => authorizeStage1Principal(creator, 'economic_call_endpoint', config.requiredScope)).toThrow(AuthorizationError);
   });
 });

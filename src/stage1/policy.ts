@@ -8,12 +8,12 @@ import {
 } from '../economic/policy.js';
 
 export const STAGE1_WRITE_OPERATIONS = {
-  stage1_create_sales_invoice_draft: {
+  economic_create_sales_invoice_draft: {
     serviceId: 'rest',
     method: 'POST',
     path: '/invoices/drafts',
   },
-  stage1_create_journal_draft_entry: {
+  economic_create_journal_draft_entry: {
     serviceId: 'journals',
     method: 'POST',
     path: '/draft-entries',
