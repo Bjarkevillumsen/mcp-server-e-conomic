@@ -10,12 +10,14 @@ not a confidential client obtaining tokens for itself.
    `e-conomic MCP API` with **Accounts in this organizational directory only**.
 2. Record the Directory (tenant) ID as `ENTRA_TENANT_ID` and Application
    (client) ID as `ENTRA_API_CLIENT_ID`.
-3. Under **Expose an API**, accept or set the Application ID URI and add delegated
-   scope `Mcp.Access`. Admin consent is recommended. Configure
+3. Under **Expose an API**, set the Application ID URI to the exact public MCP
+   endpoint, for example `https://mcp.example.com/mcp`, and add delegated scope
+   `Mcp.Access`. Admin consent is recommended. Configure
    `ENTRA_REQUIRED_SCOPE=Mcp.Access`. The server checks that short name in the
    token's `scp` claim, while OAuth discovery and authentication challenges
-   advertise the Entra-qualified request scope
-   `api://<ENTRA_API_CLIENT_ID>/Mcp.Access`.
+   advertise `https://mcp.example.com/mcp/Mcp.Access`. Set
+   `requestedAccessTokenVersion` to `2` in the API app manifest so Entra issues
+   v2 access tokens with the API client ID as the audience.
 4. Under **App roles**, create user/group roles with exact values:
    `Economic.Reader` and `Economic.DraftCreator`. Enable both roles.
 5. Open the resulting Enterprise Application, set **Assignment required?** to
@@ -56,14 +58,16 @@ Set `MCP_PUBLIC_BASE_URL` to the clean public HTTPS origin. Verify:
 .\scripts\windows\test-entra.ps1 -Mode WellKnown -BaseUrl https://mcp.example.com
 ```
 
-`/.well-known/oauth-protected-resource` returns the public resource identifier,
-tenant authorization server, bearer method, and fully-qualified OAuth request
-scope per RFC 9728:
+`/.well-known/oauth-protected-resource` returns the exact Streamable HTTP
+endpoint as the protected-resource identifier, plus the tenant authorization
+server, bearer method, and fully-qualified OAuth request scope per RFC 9728:
 <https://www.rfc-editor.org/rfc/rfc9728.html>.
-The resource identifier is the exact Streamable HTTP endpoint
-`<MCP_PUBLIC_BASE_URL>/mcp`. The server also exposes the path-specific discovery
-alias `/.well-known/oauth-protected-resource/mcp` used by MCP clients as a
-fallback.
+Set the Entra API registration's Application ID URI to the same value,
+`<MCP_PUBLIC_BASE_URL>/mcp`. This keeps Claude's OAuth resource indicator and
+the Entra scope prefix aligned. The resulting full delegated scope is
+`<MCP_PUBLIC_BASE_URL>/mcp/Mcp.Access`. The server also exposes the path-specific
+discovery alias
+`/.well-known/oauth-protected-resource/mcp` used by MCP clients as a fallback.
 
 ## Authorization checks
 

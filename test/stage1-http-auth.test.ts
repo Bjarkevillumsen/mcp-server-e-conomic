@@ -68,7 +68,7 @@ describe('Stage 1 protected HTTP resource', () => {
     const expectedMetadata = {
       resource: 'https://mcp.example.test/mcp',
       authorization_servers: [entraIssuer(entra.tenantId)],
-      scopes_supported: [`api://${entra.apiClientId}/Mcp.Access`],
+      scopes_supported: ['https://mcp.example.test/mcp/Mcp.Access'],
       bearer_methods_supported: ['header'],
     };
     expect(await response.json()).toEqual(expectedMetadata);
@@ -85,7 +85,7 @@ describe('Stage 1 protected HTTP resource', () => {
     expect(missing.status).toBe(401);
     expect(missing.headers.get('www-authenticate')).toContain('oauth-protected-resource');
     expect(missing.headers.get('www-authenticate')).toContain(
-      `scope="api://${entra.apiClientId}/Mcp.Access"`,
+      'scope="https://mcp.example.test/mcp/Mcp.Access"',
     );
 
     const invalid = await postMcp(mcpRequest('tools/list'), 'not-a-jwt');

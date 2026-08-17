@@ -32,6 +32,11 @@ Conditional booking (booking duty) — booking stays denied by default:
 
 ## Unreleased
 
+- Fixed Claude/Entra OAuth interoperability for remote MCP: protected-resource
+  metadata and `WWW-Authenticate` now advertise the public HTTPS MCP resource
+  and its fully qualified scope. Documented the required Entra v2 access-token
+  manifest setting and added safe JWT failure-category diagnostics.
+
 ## 0.5.0
 
 - Added `upsert_account` (risk `destructive`, disabled by default): create a

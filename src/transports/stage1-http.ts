@@ -228,7 +228,7 @@ function wwwAuthenticateHeaders(config: Stage1StartupConfig): Record<string, str
     : undefined;
   return {
     'WWW-Authenticate': metadataUrl
-      ? `Bearer realm="EconomicMcp", resource_metadata="${metadataUrl}", scope="${entraAuthorizationScope(config.entra)}"`
+      ? `Bearer realm="EconomicMcp", resource_metadata="${metadataUrl}", scope="${entraAuthorizationScope(config.entra, config.publicBaseUrl)}"`
       : 'Bearer realm="EconomicMcp"',
   };
 }
