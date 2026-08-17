@@ -100,6 +100,9 @@ describe('Stage 1 release assets', () => {
     expect(updater).toContain('Update-Stage1V030PolicyNames -Path $policyPath');
     expect(updater).toContain('Copy-Item -LiteralPath $policyPath -Destination (Join-Path $backupRoot $policyBackupName)');
     expect(updater).toContain('Copy-Item -LiteralPath $policyBackup -Destination $policyPath');
+    expect(updater).toContain('[IO.File]::Replace($temporaryPolicy, $Path, $replacementBackup, $true)');
+    expect(updater).toContain('Remove-Item -LiteralPath $replacementBackup -Force');
+    expect(updater).not.toContain('[IO.File]::Replace($temporaryPolicy, $Path, $null, $true)');
     const common = readFileSync('scripts/windows/Common.ps1', 'utf8');
     expect(common).toContain("Join-Path $backupRoot 'economic-policy.stage1.json'");
     expect(common).toContain("Join-Path $resolvedBackup 'economic-policy.stage1.json'");

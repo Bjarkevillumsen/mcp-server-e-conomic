@@ -32,6 +32,9 @@ Conditional booking (booking duty) — booking stays denied by default:
 
 ## Unreleased
 
+- Fixed the Stage 1 Windows updater's atomic policy migration on Windows
+  PowerShell 5.1 by supplying a valid same-volume replacement-backup path. The
+  durable release backup and automatic rollback behavior remain unchanged.
 - Replaced the 16 overlapping `stage1_*` tools with seven task-oriented
   `economic_*` tools. Added dataset discovery, enum-backed resources, structured
   field/operator validation, documented filter examples, truthful page-size 100
