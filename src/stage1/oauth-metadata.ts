@@ -14,9 +14,19 @@ export function createProtectedResourceMetadata(
   return {
     resource: normalizeResource(publicBaseUrl, config.apiClientId),
     authorization_servers: [entraIssuer(config.tenantId)],
-    scopes_supported: [config.requiredScope],
+    // Entra expects custom API permissions in OAuth requests as the complete
+    // Application-ID-URI-qualified scope. The access token's `scp` claim still
+    // contains the short scope name checked by the authorization layer.
+    scopes_supported: [entraAuthorizationScope(config)],
     bearer_methods_supported: ['header'],
   };
+}
+
+export function entraAuthorizationScope(config: EntraConfig): string {
+  if (/^[a-z][a-z0-9+.-]*:\/\//i.test(config.requiredScope)) {
+    return config.requiredScope;
+  }
+  return `api://${config.apiClientId}/${config.requiredScope}`;
 }
 
 function normalizeResource(publicBaseUrl: string | undefined, clientId: string): string {
@@ -31,5 +41,5 @@ function normalizeResource(publicBaseUrl: string | undefined, clientId: string):
   parsed.pathname = parsed.pathname.replace(/\/$/, '');
   parsed.search = '';
   parsed.hash = '';
-  return parsed.toString().replace(/\/$/, '');
+  return `${parsed.toString().replace(/\/$/, '')}/mcp`;
 }

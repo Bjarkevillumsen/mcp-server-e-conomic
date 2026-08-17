@@ -16,7 +16,10 @@ import {
   type EntraPrincipal,
   type EntraTokenValidator,
 } from '../stage1/auth.js';
-import { createProtectedResourceMetadata } from '../stage1/oauth-metadata.js';
+import {
+  createProtectedResourceMetadata,
+  entraAuthorizationScope,
+} from '../stage1/oauth-metadata.js';
 import { createStage1Server } from '../stage1/server.js';
 import { Stage1TechnicalLogger } from '../stage1/logging.js';
 import type { Stage1StartupConfig } from '../stage1/startup.js';
@@ -48,7 +51,10 @@ export function createStage1HttpServer(options: CreateStage1HttpServerOptions) {
         return;
       }
 
-      if (path === '/.well-known/oauth-protected-resource') {
+      if (
+        path === '/.well-known/oauth-protected-resource' ||
+        path === '/.well-known/oauth-protected-resource/mcp'
+      ) {
         if (req.method !== 'GET') throw new HttpRequestError(405, 'Method not allowed');
         sendJson(
           res,
@@ -222,7 +228,7 @@ function wwwAuthenticateHeaders(config: Stage1StartupConfig): Record<string, str
     : undefined;
   return {
     'WWW-Authenticate': metadataUrl
-      ? `Bearer realm="EconomicMcp", resource_metadata="${metadataUrl}"`
+      ? `Bearer realm="EconomicMcp", resource_metadata="${metadataUrl}", scope="${entraAuthorizationScope(config.entra)}"`
       : 'Bearer realm="EconomicMcp"',
   };
 }

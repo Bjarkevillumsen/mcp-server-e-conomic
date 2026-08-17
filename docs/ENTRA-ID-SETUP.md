@@ -12,8 +12,10 @@ not a confidential client obtaining tokens for itself.
    (client) ID as `ENTRA_API_CLIENT_ID`.
 3. Under **Expose an API**, accept or set the Application ID URI and add delegated
    scope `Mcp.Access`. Admin consent is recommended. Configure
-   `ENTRA_REQUIRED_SCOPE=Mcp.Access` (the validator also accepts the full
-   Application-ID-URI-qualified form in `scp`).
+   `ENTRA_REQUIRED_SCOPE=Mcp.Access`. The server checks that short name in the
+   token's `scp` claim, while OAuth discovery and authentication challenges
+   advertise the Entra-qualified request scope
+   `api://<ENTRA_API_CLIENT_ID>/Mcp.Access`.
 4. Under **App roles**, create user/group roles with exact values:
    `Economic.Reader` and `Economic.DraftCreator`. Enable both roles.
 5. Open the resulting Enterprise Application, set **Assignment required?** to
@@ -55,8 +57,13 @@ Set `MCP_PUBLIC_BASE_URL` to the clean public HTTPS origin. Verify:
 ```
 
 `/.well-known/oauth-protected-resource` returns the public resource identifier,
-tenant authorization server, bearer method, and required scope per RFC 9728:
+tenant authorization server, bearer method, and fully-qualified OAuth request
+scope per RFC 9728:
 <https://www.rfc-editor.org/rfc/rfc9728.html>.
+The resource identifier is the exact Streamable HTTP endpoint
+`<MCP_PUBLIC_BASE_URL>/mcp`. The server also exposes the path-specific discovery
+alias `/.well-known/oauth-protected-resource/mcp` used by MCP clients as a
+fallback.
 
 ## Authorization checks
 
