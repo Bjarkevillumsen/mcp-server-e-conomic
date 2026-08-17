@@ -63,4 +63,11 @@ describe('Stage 1 release assets', () => {
     expect(caddyfile).toContain('auto_https disable_redirects');
     expect(caddyfile).not.toContain('log_credentials');
   });
+
+  it('sets an explicit protected ACL on the generated Caddyfile', () => {
+    const installer = readFileSync('scripts/windows/install-caddy.ps1', 'utf8');
+    expect(installer).toContain('icacls.exe $targetCaddyfile /inheritance:r');
+    expect(installer).toContain("'BUILTIN\\Administrators:F'");
+    expect(installer).toContain('"${serviceIdentity}:R"');
+  });
 });
