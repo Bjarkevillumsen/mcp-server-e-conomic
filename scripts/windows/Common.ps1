@@ -55,7 +55,10 @@ function Test-EconomicMcpPackageRoot {
         'config\Caddyfile.example',
         'config\economic-policy.stage1.json',
         'config\stage1.env.example',
-        'config\companies.stage1.example.json'
+        'config\companies.stage1.example.json',
+        'config\companies-import.example.csv',
+        'scripts\windows\set-company.ps1',
+        'scripts\windows\import-companies.ps1'
     )
     foreach ($relative in $required) {
         if (-not (Test-Path -LiteralPath (Join-Path $Root $relative))) {

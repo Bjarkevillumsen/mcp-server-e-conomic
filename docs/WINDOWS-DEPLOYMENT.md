@@ -63,6 +63,13 @@ copy, then run `set-company.ps1` before starting. The application fails closed
 if required values, policy, or the protected 1-100 company registry are
 missing/unsafe.
 
+For bulk onboarding where many agreements share one App Secret, fill the
+semicolon-delimited `companies-import.example.csv` and use
+`import-companies.ps1`. The importer can reuse the protected App Secret from an
+existing company, verifies every grant against e-conomic, validates the complete
+merged registry, and performs a rollback-protected service restart. See
+`OPERATIONS-RUNBOOK.md` for the exact command and CSV access precautions.
+
 When upgrading a legacy single-company installation, stop the service once and
 run the helper with `-UseLegacyCredentials`; it migrates the existing tokens
 without displaying them and removes their duplicate environment entries.

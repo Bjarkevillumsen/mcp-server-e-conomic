@@ -58,6 +58,7 @@ try {
     Copy-Item -LiteralPath (Join-Path $repositoryRoot 'config\economic-policy.stage1.json') -Destination (Join-Path $stageRoot 'config')
     Copy-Item -LiteralPath (Join-Path $repositoryRoot 'config\stage1.env.example') -Destination (Join-Path $stageRoot 'config')
     Copy-Item -LiteralPath (Join-Path $repositoryRoot 'config\companies.stage1.example.json') -Destination (Join-Path $stageRoot 'config')
+    Copy-Item -LiteralPath (Join-Path $repositoryRoot 'config\companies-import.example.csv') -Destination (Join-Path $stageRoot 'config')
     Copy-Item -LiteralPath (Join-Path $repositoryRoot 'config\cloudflared-ingress.example.yml') -Destination (Join-Path $stageRoot 'config')
     Copy-Item -LiteralPath (Join-Path $repositoryRoot 'config\Caddyfile.example') -Destination (Join-Path $stageRoot 'config')
     Copy-Item -Path (Join-Path $repositoryRoot 'docs\*') -Destination (Join-Path $stageRoot 'docs') -Recurse

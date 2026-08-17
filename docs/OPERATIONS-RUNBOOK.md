@@ -52,6 +52,37 @@ Agreement numbers and company IDs must be unique; the 101st company is rejected.
 After a change, call `stage1_list_companies`, then check the selected company's
 context. Do not use a draft write as a health test.
 
+## Bulk-import companies sharing one App Secret
+
+For many agreements under the same e-conomic app, copy
+`companies-import.example.csv` to an administrator-controlled staging path and
+add one row per new agreement. The semicolon-delimited columns are:
+`CompanyId`, `DisplayName`, `AgreementNumber`, `AgreementGrantToken`,
+`ReadUserOids`, `DraftUserOids`, and `Enabled`. Separate multiple Entra object
+IDs with `|`. Blank `ReadUserOids` defaults to `*`; blank `DraftUserOids`
+defaults to no draft access.
+
+The following merges the rows with the protected registry and reuses the App
+Secret already stored for `squaremeter` without displaying it:
+
+```powershell
+& 'C:\Program Files\EconomicMcp\scripts\windows\import-companies.ps1' `
+  -CsvPath 'C:\ProgramData\EconomicMcp\config\companies-import.csv' `
+  -ReuseAppSecretFromCompanyId 'squaremeter' `
+  -RestartService
+```
+
+Before changing the registry, the importer calls e-conomic `/self` for each row
+and confirms the returned agreement number. The complete CSV and merged registry
+are validated before the service is stopped. The registry is replaced in one
+filesystem operation, health-checked, and rolled back on failure. Without
+`-ReuseAppSecretFromCompanyId`, the shared App Secret is requested once through
+hidden input. `-ReplaceAll` replaces the entire registry instead of merging.
+`-SkipEconomicValidation` is reserved for controlled offline recovery.
+
+The CSV contains live Agreement Grant Tokens. Restrict it to administrators and
+remove the staging copy after verification.
+
 ## Common failures
 
 - **Service restart loop:** inspect wrapper stderr, confirm Node path, environment

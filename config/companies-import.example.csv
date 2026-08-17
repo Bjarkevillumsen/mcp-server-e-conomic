@@ -1,0 +1,3 @@
+CompanyId;DisplayName;AgreementNumber;AgreementGrantToken;ReadUserOids;DraftUserOids;Enabled
+customer-a;Customer A ApS;1234567;REPLACE_WITH_AGREEMENT_GRANT_TOKEN;*;;true
+customer-b;Customer B ApS;2345678;REPLACE_WITH_AGREEMENT_GRANT_TOKEN;*;;true

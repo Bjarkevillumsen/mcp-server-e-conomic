@@ -32,6 +32,11 @@ Conditional booking (booking duty) — booking stays denied by default:
 
 ## Unreleased
 
+- Added an atomic semicolon-delimited CSV importer for bulk onboarding. It can
+  reuse the protected App Secret Token from an existing company, validates every
+  Agreement Grant Token against e-conomic before changing the complete 1-100
+  company registry, defaults imports to read-only access, and rolls back if the
+  service health check fails.
 - Added a fail-closed multi-company Stage 1 registry for 1-100 e-conomic
   agreements, isolated credentials and expected agreement numbers per company,
   per-company user ACLs, `stage1_list_companies`, mandatory `companyId` on every

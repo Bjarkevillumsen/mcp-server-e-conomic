@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest';
 const requiredAssets = [
   'config/stage1.env.example',
   'config/companies.stage1.example.json',
+  'config/companies-import.example.csv',
   'config/cloudflared-ingress.example.yml',
   'config/Caddyfile.example',
   'service/EconomicMcpService.xml',
@@ -22,6 +23,7 @@ const requiredAssets = [
   'scripts/windows/test-economic.ps1',
   'scripts/windows/test-entra.ps1',
   'scripts/windows/set-company.ps1',
+  'scripts/windows/import-companies.ps1',
   'docs/ARCHITECTURE.md',
   'docs/NETWORK-DESIGN.md',
   'docs/ENTRA-ID-SETUP.md',
@@ -59,6 +61,17 @@ describe('Stage 1 release assets', () => {
     expect(ci).toContain('scripts/build-release.ps1');
     expect(ci).not.toContain('acceptance:stage1');
     expect(ci).not.toContain('ECONOMIC_ALLOW_LIVE_WRITE_TESTS');
+  });
+
+  it('bulk-imports companies with one shared app secret and no secret output', () => {
+    const importer = readFileSync('scripts/windows/import-companies.ps1', 'utf8');
+    expect(importer).toContain('[string]$ReuseAppSecretFromCompanyId');
+    expect(importer).toContain('Read-Host $Prompt -AsSecureString');
+    expect(importer).toContain('[IO.File]::Replace($temporaryPath, $registryPath, $backupPath, $true)');
+    expect(importer).toContain('Test-EconomicCompanyCredentials');
+    expect(importer).toContain('The source CSV still contains Agreement Grant Tokens');
+    expect(importer).not.toContain('Write-Host $sharedAppSecret');
+    expect(importer).not.toContain('Write-Host $agreementGrantToken');
   });
 
   it('keeps the Caddy origin loopback-only and the admin endpoint local', () => {
