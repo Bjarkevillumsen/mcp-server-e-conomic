@@ -52,13 +52,20 @@ function Update-Stage1V030PolicyNames {
     if (-not $changed) { return }
 
     $policy.allowedCapabilities = $capabilities
-    $temporaryPolicy = Join-Path (Split-Path -Parent $Path) "economic-policy.stage1.$([Guid]::NewGuid().ToString('N')).tmp"
+    $policyDirectory = Split-Path -Parent $Path
+    $operationId = [Guid]::NewGuid().ToString('N')
+    $temporaryPolicy = Join-Path $policyDirectory "economic-policy.stage1.$operationId.tmp"
+    $replacementBackup = Join-Path $policyDirectory "economic-policy.stage1.$operationId.replace-backup"
     try {
         $json = $policy | ConvertTo-Json -Depth 12
         [IO.File]::WriteAllText($temporaryPolicy, $json, [Text.UTF8Encoding]::new($false))
-        [IO.File]::Replace($temporaryPolicy, $Path, $null, $true)
+        # Windows PowerShell 5.1/.NET Framework rejects a null backup path for
+        # this overload. The updater already keeps the durable rollback copy in
+        # $backupRoot, so use a same-volume transient backup for the atomic swap.
+        [IO.File]::Replace($temporaryPolicy, $Path, $replacementBackup, $true)
     } finally {
         if (Test-Path -LiteralPath $temporaryPolicy) { Remove-Item -LiteralPath $temporaryPolicy -Force }
+        if (Test-Path -LiteralPath $replacementBackup) { Remove-Item -LiteralPath $replacementBackup -Force }
     }
 }
 
