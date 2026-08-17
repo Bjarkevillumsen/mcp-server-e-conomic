@@ -1,5 +1,6 @@
 import {
   createRemoteJWKSet,
+  errors as joseErrors,
   jwtVerify,
   type JWTPayload,
   type JWTVerifyGetKey,
@@ -130,7 +131,7 @@ export function createEntraTokenValidator(
       if (error instanceof AuthenticationError) {
         throw error;
       }
-      throw new AuthenticationError();
+      throw new AuthenticationError(authenticationFailureReason(error));
     }
   };
 
@@ -260,6 +261,19 @@ function principalFromPayload(payload: JWTPayload): EntraPrincipal {
 
 function firstString(...values: unknown[]): string | undefined {
   return values.find((value): value is string => typeof value === 'string' && value.length > 0);
+}
+
+function authenticationFailureReason(error: unknown): string {
+  if (error instanceof joseErrors.JWTClaimValidationFailed) {
+    return `Unauthorized (${error.claim} claim validation failed).`;
+  }
+  if (error instanceof joseErrors.JWTExpired) {
+    return 'Unauthorized (token expired).';
+  }
+  if (error instanceof joseErrors.JOSEError) {
+    return `Unauthorized (${error.code}).`;
+  }
+  return 'Unauthorized (token validation failed).';
 }
 
 function isGuid(value: string): boolean {

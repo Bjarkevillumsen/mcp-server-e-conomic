@@ -12,6 +12,7 @@ export interface Stage1TechnicalLogEvent {
   requestId: string;
   principal?: EntraPrincipal;
   tool?: Stage1ToolName;
+  companyId?: string;
   operationCategory: 'http' | 'read' | 'draft_write' | 'authentication' | 'authorization';
   policyResult?: 'allowed' | 'denied' | 'not_applicable';
   economicHttpStatus?: number;
@@ -37,6 +38,7 @@ export class Stage1TechnicalLogger {
       username: event.principal?.username ? safeText(event.principal.username) : undefined,
       role: event.principal ? primaryEconomicRole(event.principal) : undefined,
       tool: event.tool,
+      companyId: event.companyId ? safeText(event.companyId) : undefined,
       operationCategory: event.operationCategory,
       policyResult: event.policyResult,
       economicHttpStatus: event.economicHttpStatus,

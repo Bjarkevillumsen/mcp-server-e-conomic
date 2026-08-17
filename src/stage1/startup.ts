@@ -1,5 +1,10 @@
 import { existsSync } from 'node:fs';
 import { readEntraConfig, type EntraConfig } from './auth.js';
+import {
+  legacyStage1Company,
+  readStage1CompanyRegistry,
+  type Stage1CompanyConfig,
+} from './companies.js';
 
 export interface Stage1StartupConfig {
   production: boolean;
@@ -7,15 +12,19 @@ export interface Stage1StartupConfig {
   port: number;
   maxBodyBytes: number;
   requestTimeoutMs: number;
+  rateLimitMaxRequests: number;
+  rateLimitWindowMs: number;
   allowedOrigins: string[];
   publicBaseUrl?: string;
   entra: EntraConfig;
-  expectedAgreementNumber: string;
+  companies: readonly Stage1CompanyConfig[];
+  companyRegistryPath?: string;
 }
 
 export function validateStage1Startup(
   environment: NodeJS.ProcessEnv = process.env,
   pathExists: (path: string) => boolean = existsSync,
+  registryReader: (path: string) => Stage1CompanyConfig[] = readStage1CompanyRegistry,
 ): Stage1StartupConfig {
   const production = environment.NODE_ENV === 'production';
   const host = environment.MCP_HTTP_HOST?.trim() || '127.0.0.1';
@@ -33,6 +42,20 @@ export function validateStage1Startup(
     1_000,
     120_000,
     'MCP_REQUEST_TIMEOUT_MS',
+  );
+  const rateLimitMaxRequests = boundedInteger(
+    environment.MCP_RATE_LIMIT_MAX_REQUESTS,
+    600,
+    1,
+    10_000,
+    'MCP_RATE_LIMIT_MAX_REQUESTS',
+  );
+  const rateLimitWindowMs = boundedInteger(
+    environment.MCP_RATE_LIMIT_WINDOW_MS,
+    60_000,
+    1_000,
+    3_600_000,
+    'MCP_RATE_LIMIT_WINDOW_MS',
   );
 
   if (environment.ECONOMIC_ENABLE_BOOKING === 'true') {
@@ -61,12 +84,6 @@ export function validateStage1Startup(
   if (production && (!policyPath || !pathExists(policyPath))) {
     throw new Error('Production requires an existing ECONOMIC_POLICY_PATH.');
   }
-  if (production && !environment.ECONOMIC_APP_SECRET_TOKEN) {
-    throw new Error('Production requires ECONOMIC_APP_SECRET_TOKEN.');
-  }
-  if (production && !environment.ECONOMIC_AGREEMENT_GRANT_TOKEN) {
-    throw new Error('Production requires ECONOMIC_AGREEMENT_GRANT_TOKEN.');
-  }
   if (production && !environment.ECONOMIC_AUDIT_LOG?.trim()) {
     throw new Error('Production requires ECONOMIC_AUDIT_LOG for the separate write audit trail.');
   }
@@ -85,9 +102,15 @@ export function validateStage1Startup(
     throw new Error('Production forbids overriding the e-conomic OpenAPI hostname.');
   }
 
-  const expectedAgreementNumber = environment.ECONOMIC_EXPECTED_AGREEMENT_NUMBER?.trim() ?? '';
-  if (!/^\d+$/.test(expectedAgreementNumber)) {
-    throw new Error('ECONOMIC_EXPECTED_AGREEMENT_NUMBER must be configured as digits.');
+  const companyRegistryPath = environment.ECONOMIC_COMPANY_REGISTRY_PATH?.trim();
+  let companies: readonly Stage1CompanyConfig[];
+  if (companyRegistryPath) {
+    if (!pathExists(companyRegistryPath)) {
+      throw new Error('ECONOMIC_COMPANY_REGISTRY_PATH does not exist.');
+    }
+    companies = registryReader(companyRegistryPath);
+  } else {
+    companies = [legacyStage1Company(environment)];
   }
 
   const entra = readEntraConfig(environment);
@@ -107,10 +130,13 @@ export function validateStage1Startup(
     port,
     maxBodyBytes,
     requestTimeoutMs,
+    rateLimitMaxRequests,
+    rateLimitWindowMs,
     allowedOrigins,
     ...(publicBaseUrl ? { publicBaseUrl } : {}),
     entra,
-    expectedAgreementNumber,
+    companies,
+    ...(companyRegistryPath ? { companyRegistryPath } : {}),
   };
 }
 

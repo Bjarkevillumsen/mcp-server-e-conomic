@@ -7,7 +7,8 @@ flowchart TD
     Client["Claude, ChatGPT, or another MCP client"] -->|"HTTPS + Entra access token"| Edge["Public HTTPS transport"]
     Edge -->|"Cloudflare Tunnel or Caddy TCP 443"| MCP["EconomicMcp Stage 1 service on 127.0.0.1:3000"]
     MCP -->|"OIDC metadata and JWKS"| Entra["Single Microsoft Entra tenant"]
-    MCP -->|"outbound HTTPS with e-conomic tokens"| Economic["e-conomic REST and OpenAPI"]
+    MCP --> Registry["Protected registry: up to 100 companies"]
+    Registry -->|"selected token pair only"| Economic["e-conomic REST and OpenAPI"]
     MCP --> Logs["redacted technical logs"]
     MCP --> Audit["separate JSONL write audit"]
 ```
@@ -22,15 +23,19 @@ application. The Node process verifies Entra tokens itself.
 
 Every request crosses independent controls:
 
-1. The Stage 1 server registers only the 15 names in `STAGE1_ALLOWED_TOOLS`.
+1. The Stage 1 server registers only the 16 names in `STAGE1_ALLOWED_TOOLS`.
 2. Signed, tenant-specific Entra claims and the requested tool are authorized on
    every invocation. `Economic.Reader` can read; `Economic.DraftCreator` can also
    call the two draft tools.
-3. The Stage 1 policy permits only `POST /invoices/drafts` and
+3. `stage1_list_companies` filters the registry by Entra user object ID. Every
+   business tool requires an explicit `companyId`, then creates a client with
+   only that company's token pair.
+4. The Stage 1 policy permits only `POST /invoices/drafts` and
    `POST /draft-entries`; all other mutations remain denied even if another
    layer fails.
-4. Immediately before either mutation, `/self` must return the configured
-   agreement number. Live acceptance is additionally locked to `1382005`.
+5. Immediately before either mutation, `/self` must return the selected
+   registry entry's agreement number. Live acceptance is additionally locked to
+   `1382005`.
 
 Reads are on demand, bounded, and catalog-validated. No accounting replica,
 vector database, webhook ingestion, or approval database is introduced.

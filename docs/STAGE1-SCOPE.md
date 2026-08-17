@@ -8,15 +8,18 @@ approved e-conomic resources on demand and to create two kinds of unbooked
 drafts. Humans remain responsible for reviewing and booking those drafts in
 e-conomic.
 
-The expected live acceptance agreement is `1382005`. That number is an
-identity assertion, never a credential. Authentication uses only
-`ECONOMIC_APP_SECRET_TOKEN` and `ECONOMIC_AGREEMENT_GRANT_TOKEN` supplied by
-the runtime environment or an approved secret provider.
+One deployment supports 1-100 e-conomic agreements. Each registry entry has a
+stable `companyId`, display name, expected agreement number, explicit user ACL,
+and its own App Secret/Agreement Grant token pair. Tokens live only in the
+protected server registry and are never MCP inputs. The current live acceptance
+fixture remains agreement `1382005`; that number is an identity assertion, not
+a credential.
 
 ## Advertised MCP tools
 
 The Stage 1 server will advertise exactly this allowlist:
 
+- `stage1_list_companies`
 - `stage1_check_connection`
 - `stage1_get_company_context`
 - `stage1_search_entities`
@@ -37,6 +40,12 @@ Read tools reuse the upstream client, catalog, schemas, endpoint validation,
 pagination behavior, and curated workflow implementations. Data is fetched on
 demand; Stage 1 does not synchronize or persist a copy of the accounting
 system.
+
+`stage1_list_companies` returns only companies allowed for the signed-in user.
+Every other tool requires one of the returned `companyId` values. Unknown,
+disabled, and unauthorized IDs fail with the same response so the registry
+cannot be enumerated. Results and audit events identify the selected company but
+never expose its credentials.
 
 `stage1_read_economic` is GET-only. It accepts a catalog service and known path
 template rather than a URL or method, and it enforces bounded pagination. It is

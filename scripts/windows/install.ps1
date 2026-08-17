@@ -40,6 +40,8 @@ foreach ($item in @('app','service','scripts','caddy')) {
 Copy-Item -LiteralPath (Join-Path $packageRoot 'release-manifest.json') -Destination $installRoot -Force
 Copy-Item -LiteralPath (Join-Path $packageRoot 'config\economic-policy.stage1.json') -Destination (Join-Path $dataRoot 'config') -Force
 Copy-Item -LiteralPath (Join-Path $packageRoot 'config\stage1.env.example') -Destination (Join-Path $dataRoot 'config') -Force
+Copy-Item -LiteralPath (Join-Path $packageRoot 'config\companies.stage1.example.json') -Destination (Join-Path $dataRoot 'config') -Force
+Copy-Item -LiteralPath (Join-Path $packageRoot 'config\companies-import.example.csv') -Destination (Join-Path $dataRoot 'config') -Force
 
 $targetEnvironment = Join-Path $dataRoot 'config\stage1.env'
 if ($EnvironmentFile) {

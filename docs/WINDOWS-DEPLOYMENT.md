@@ -8,7 +8,8 @@
 - A supported Node.js LTS runtime satisfying `>=20.11` (Node 22 LTS is the
   deployment baseline). Normal service execution does not require administrator.
 - A verified `EconomicMcp-Stage1-x.y.z.zip` from the tagged GitHub release.
-- Entra IDs, e-conomic tokens, public hostname/origin, and approved CORS origins.
+- Entra IDs, one e-conomic token pair per company, company IDs/access lists,
+  public hostname/origin, and approved CORS origins.
 
 The package contains compiled application files, production-only npm
 dependencies, deployment scripts, configuration templates, documentation, a
@@ -45,17 +46,33 @@ Node path is pinned in the protected `node.path` file.
 Extract the ZIP to a temporary administrator-controlled directory. Verify the
 GitHub release source and optionally compare file SHA-256 values with
 `release-manifest.json`. Prepare a real environment file from
-`config\stage1.env.example`; never edit or publish the example with secrets.
+`config\stage1.env.example`; company secrets are added afterward through the
+interactive helper and never placed in the environment template.
 
 ```powershell
 Set-ExecutionPolicy -Scope Process Bypass
-.\scripts\windows\install.ps1 -EnvironmentFile C:\SecureStaging\stage1.env -Start
+.\scripts\windows\install.ps1 -EnvironmentFile C:\SecureStaging\stage1.env
+& 'C:\Program Files\EconomicMcp\scripts\windows\set-company.ps1' `
+  -CompanyId 'squaremeter' -DisplayName 'SquareMeter' `
+  -AgreementNumber '1382005' -Start
 ```
 
 Running `.\scripts\windows\install.ps1` without parameters installs the service
 stopped and creates a placeholder `stage1.env`; edit the protected ProgramData
-copy before starting. The application fails closed if required values or policy
-are missing/unsafe.
+copy, then run `set-company.ps1` before starting. The application fails closed
+if required values, policy, or the protected 1-100 company registry are
+missing/unsafe.
+
+For bulk onboarding where many agreements share one App Secret, fill the
+semicolon-delimited `companies-import.example.csv` and use
+`import-companies.ps1`. The importer can reuse the protected App Secret from an
+existing company, verifies every grant against e-conomic, validates the complete
+merged registry, and performs a rollback-protected service restart. See
+`OPERATIONS-RUNBOOK.md` for the exact command and CSV access precautions.
+
+When upgrading a legacy single-company installation, stop the service once and
+run the helper with `-UseLegacyCredentials`; it migrates the existing tokens
+without displaying them and removes their duplicate environment entries.
 
 After installation, configure either Cloudflare Tunnel or Caddy. For the Caddy
 path, follow `CADDY-WINDOWS.md` and open/forward only TCP 443 after local checks.

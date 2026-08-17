@@ -1,11 +1,11 @@
 import { randomUUID } from 'node:crypto';
+import { isIP } from 'node:net';
 import {
   createServer as createNodeServer,
   type IncomingMessage,
   type ServerResponse,
 } from 'node:http';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
-import { EconomicClient } from '../economic/client.js';
 import { HttpRequestError, readJsonBody } from './http-helpers.js';
 import {
   AuthenticationError,
@@ -22,26 +22,38 @@ import {
 } from '../stage1/oauth-metadata.js';
 import { createStage1Server } from '../stage1/server.js';
 import { Stage1TechnicalLogger } from '../stage1/logging.js';
+import {
+  Stage1CompanyRegistry,
+  type Stage1CompanyClientFactory,
+} from '../stage1/companies.js';
 import type { Stage1StartupConfig } from '../stage1/startup.js';
 
 export interface CreateStage1HttpServerOptions {
   config: Stage1StartupConfig;
   tokenValidator?: EntraTokenValidator;
   logger?: Stage1TechnicalLogger;
-  clientFactory?: () => EconomicClient;
+  clientFactory?: Stage1CompanyClientFactory;
 }
 
 export function createStage1HttpServer(options: CreateStage1HttpServerOptions) {
   const { config } = options;
   const tokenValidator = options.tokenValidator ?? createEntraTokenValidator(config.entra);
   const logger = options.logger ?? new Stage1TechnicalLogger();
-  const clientFactory = options.clientFactory ?? (() => new EconomicClient({ timeoutMs: config.requestTimeoutMs }));
+  const companyRegistry = new Stage1CompanyRegistry(config.companies, {
+    timeoutMs: config.requestTimeoutMs,
+    ...(options.clientFactory ? { clientFactory: options.clientFactory } : {}),
+  });
+  const rateLimiter = new FixedWindowRateLimiter(
+    config.rateLimitMaxRequests,
+    config.rateLimitWindowMs,
+  );
 
   const httpServer = createNodeServer(async (req, res) => {
     const requestId = requestIdFor(req);
     const startedAt = Date.now();
     let principal: EntraPrincipal | undefined;
     res.setHeader('X-Request-Id', requestId);
+    setSecurityHeaders(res, config);
 
     try {
       const path = requestPath(req);
@@ -73,6 +85,10 @@ export function createStage1HttpServer(options: CreateStage1HttpServerOptions) {
       }
       if (path !== '/mcp') throw new HttpRequestError(404, 'Not found');
       if (req.method !== 'POST') throw new HttpRequestError(405, 'Method not allowed');
+      const rateLimit = rateLimiter.consume(clientAddressFor(req));
+      if (!rateLimit.allowed) {
+        throw new RateLimitError(rateLimit.retryAfterSeconds);
+      }
       assertJsonContentType(req);
 
       principal = await tokenValidator.validateAuthorizationHeader(req.headers.authorization);
@@ -88,8 +104,7 @@ export function createStage1HttpServer(options: CreateStage1HttpServerOptions) {
       }
 
       const mcpServer = createStage1Server({
-        client: clientFactory(),
-        expectedAgreementNumber: config.expectedAgreementNumber,
+        companyRegistry,
         authorize: makeToolAuthorizer(principal, config.entra.requiredScope),
         requestContext: { requestId, principal },
         logger,
@@ -129,7 +144,11 @@ export function createStage1HttpServer(options: CreateStage1HttpServerOptions) {
       });
 
       if (!res.headersSent) {
-        const headers = status === 401 ? wwwAuthenticateHeaders(config) : undefined;
+        const headers = status === 401
+          ? wwwAuthenticateHeaders(config)
+          : error instanceof RateLimitError
+            ? { 'Retry-After': String(error.retryAfterSeconds) }
+            : undefined;
         sendJson(
           res,
           status,
@@ -218,6 +237,7 @@ function publicErrorMessage(status: number): string {
   if (status === 405) return 'Method not allowed';
   if (status === 413) return 'Payload too large';
   if (status === 415) return 'Unsupported media type';
+  if (status === 429) return 'Too many requests';
   if (status >= 500) return 'Internal server error';
   return 'Bad request';
 }
@@ -228,7 +248,7 @@ function wwwAuthenticateHeaders(config: Stage1StartupConfig): Record<string, str
     : undefined;
   return {
     'WWW-Authenticate': metadataUrl
-      ? `Bearer realm="EconomicMcp", resource_metadata="${metadataUrl}", scope="${entraAuthorizationScope(config.entra)}"`
+      ? `Bearer realm="EconomicMcp", resource_metadata="${metadataUrl}", scope="${entraAuthorizationScope(config.entra, config.publicBaseUrl)}"`
       : 'Bearer realm="EconomicMcp"',
   };
 }
@@ -264,6 +284,86 @@ function sendJson(
     ...extraHeaders,
   });
   res.end(JSON.stringify(payload));
+}
+
+function setSecurityHeaders(res: ServerResponse, config: Stage1StartupConfig): void {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'DENY');
+  res.setHeader('Referrer-Policy', 'no-referrer');
+  res.setHeader('Content-Security-Policy', "default-src 'none'; frame-ancestors 'none'");
+  res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+  res.setHeader('Cache-Control', 'no-store');
+  if (config.production && config.publicBaseUrl) {
+    res.setHeader('Strict-Transport-Security', 'max-age=31536000');
+  }
+}
+
+function clientAddressFor(req: IncomingMessage): string {
+  const remoteAddress = req.socket.remoteAddress ?? 'unknown';
+  if (!isLoopback(remoteAddress)) return remoteAddress;
+
+  const forwarded = req.headers['x-forwarded-for'];
+  const value = Array.isArray(forwarded) ? forwarded[0] : forwarded;
+  const firstAddress = value?.split(',', 1)[0]?.trim();
+  return firstAddress && isIP(firstAddress) ? firstAddress : remoteAddress;
+}
+
+function isLoopback(address: string): boolean {
+  return address === '127.0.0.1' || address === '::1' || address === '::ffff:127.0.0.1';
+}
+
+interface RateLimitDecision {
+  allowed: boolean;
+  retryAfterSeconds: number;
+}
+
+class FixedWindowRateLimiter {
+  private readonly buckets = new Map<string, { count: number; windowStartedAt: number }>();
+
+  constructor(
+    private readonly maxRequests: number,
+    private readonly windowMs: number,
+    private readonly now: () => number = Date.now,
+    private readonly maxTrackedClients = 10_000,
+  ) {}
+
+  consume(key: string): RateLimitDecision {
+    const now = this.now();
+    let bucket = this.buckets.get(key);
+    if (!bucket || now - bucket.windowStartedAt >= this.windowMs) {
+      this.makeRoom(now, key);
+      bucket = { count: 0, windowStartedAt: now };
+      this.buckets.set(key, bucket);
+    }
+
+    const retryAfterSeconds = Math.max(
+      1,
+      Math.ceil((bucket.windowStartedAt + this.windowMs - now) / 1_000),
+    );
+    if (bucket.count >= this.maxRequests) {
+      return { allowed: false, retryAfterSeconds };
+    }
+    bucket.count += 1;
+    return { allowed: true, retryAfterSeconds };
+  }
+
+  private makeRoom(now: number, incomingKey: string): void {
+    if (this.buckets.has(incomingKey) || this.buckets.size < this.maxTrackedClients) return;
+    for (const [key, bucket] of this.buckets) {
+      if (now - bucket.windowStartedAt >= this.windowMs) this.buckets.delete(key);
+    }
+    if (this.buckets.size >= this.maxTrackedClients) {
+      const oldestKey = this.buckets.keys().next().value as string | undefined;
+      if (oldestKey) this.buckets.delete(oldestKey);
+    }
+  }
+}
+
+class RateLimitError extends HttpRequestError {
+  constructor(readonly retryAfterSeconds: number) {
+    super(429, 'Rate limit exceeded');
+    this.name = 'RateLimitError';
+  }
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

@@ -3,6 +3,8 @@ import { describe, expect, it } from 'vitest';
 
 const requiredAssets = [
   'config/stage1.env.example',
+  'config/companies.stage1.example.json',
+  'config/companies-import.example.csv',
   'config/cloudflared-ingress.example.yml',
   'config/Caddyfile.example',
   'service/EconomicMcpService.xml',
@@ -20,6 +22,9 @@ const requiredAssets = [
   'scripts/windows/uninstall-caddy.ps1',
   'scripts/windows/test-economic.ps1',
   'scripts/windows/test-entra.ps1',
+  'scripts/windows/set-company.ps1',
+  'scripts/windows/import-companies.ps1',
+  'scripts/windows/readiness-check.ps1',
   'docs/ARCHITECTURE.md',
   'docs/NETWORK-DESIGN.md',
   'docs/ENTRA-ID-SETUP.md',
@@ -40,12 +45,15 @@ describe('Stage 1 release assets', () => {
   it('keeps the committed environment file placeholder-only and localhost-bound', () => {
     const example = readFileSync('config/stage1.env.example', 'utf8');
     expect(example).toContain('MCP_HTTP_HOST=127.0.0.1');
-    expect(example).toContain('ECONOMIC_EXPECTED_AGREEMENT_NUMBER=1382005');
+    expect(example).toContain('ECONOMIC_COMPANY_REGISTRY_PATH=C:\\ProgramData\\EconomicMcp\\config\\companies.stage1.json');
     expect(example).toContain('ECONOMIC_ENABLE_BOOKING=false');
     expect(example).toMatch(/^ENTRA_TENANT_ID=$/m);
     expect(example).toMatch(/^ENTRA_API_CLIENT_ID=$/m);
-    expect(example).toMatch(/^ECONOMIC_APP_SECRET_TOKEN=$/m);
-    expect(example).toMatch(/^ECONOMIC_AGREEMENT_GRANT_TOKEN=$/m);
+    expect(example).not.toMatch(/^ECONOMIC_APP_SECRET_TOKEN=/m);
+    expect(example).not.toMatch(/^ECONOMIC_AGREEMENT_GRANT_TOKEN=/m);
+    const companies = readFileSync('config/companies.stage1.example.json', 'utf8');
+    expect(companies).toContain('REPLACE_WITH_APP_SECRET_TOKEN');
+    expect(companies).toContain('REPLACE_WITH_AGREEMENT_GRANT_TOKEN');
   });
 
   it('keeps normal CI free of live acceptance commands', () => {
@@ -56,11 +64,34 @@ describe('Stage 1 release assets', () => {
     expect(ci).not.toContain('ECONOMIC_ALLOW_LIVE_WRITE_TESTS');
   });
 
+  it('monitors the production endpoint from outside the Windows host', () => {
+    const monitor = readFileSync('.github/workflows/production-monitor.yml', 'utf8');
+    expect(monitor).toContain('https://mcp.squaremeter.dk');
+    expect(monitor).toContain("cron: '*/15 * * * *'");
+    expect(monitor).toContain("test \"$auth_status\" = '401'");
+    expect(monitor).toContain("test \"$cors_status\" = '403'");
+    expect(monitor).toContain('strict-transport-security');
+    expect(monitor).toContain('x-content-type-options');
+  });
+
+  it('bulk-imports companies with one shared app secret and no secret output', () => {
+    const importer = readFileSync('scripts/windows/import-companies.ps1', 'utf8');
+    expect(importer).toContain('[string]$ReuseAppSecretFromCompanyId');
+    expect(importer).toContain('Read-Host $Prompt -AsSecureString');
+    expect(importer).toContain('[IO.File]::Replace($temporaryPath, $registryPath, $backupPath, $true)');
+    expect(importer).toContain('Test-EconomicCompanyCredentials');
+    expect(importer).toContain('The source CSV still contains Agreement Grant Tokens');
+    expect(importer).not.toContain('Write-Host $sharedAppSecret');
+    expect(importer).not.toContain('Write-Host $agreementGrantToken');
+  });
+
   it('keeps the Caddy origin loopback-only and the admin endpoint local', () => {
     const caddyfile = readFileSync('config/Caddyfile.example', 'utf8');
     expect(caddyfile).toContain('reverse_proxy 127.0.0.1:3000');
     expect(caddyfile).toContain('admin 127.0.0.1:2019');
     expect(caddyfile).toContain('auto_https disable_redirects');
+    expect(caddyfile).toContain('Strict-Transport-Security "max-age=31536000"');
+    expect(caddyfile).toContain('X-Content-Type-Options "nosniff"');
     expect(caddyfile).not.toContain('log_credentials');
   });
 

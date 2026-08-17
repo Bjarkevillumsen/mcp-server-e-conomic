@@ -65,13 +65,17 @@ async function main(): Promise<void> {
 
 async function runReadAcceptance(client: Client): Promise<Record<string, unknown>> {
   const results: Array<Record<string, unknown>> = [];
-  const company = await client.callTool({ name: 'stage1_get_company_context', arguments: {} });
+  const company = await client.callTool({
+    name: 'stage1_get_company_context',
+    arguments: { companyId: liveCompanyId() },
+  });
   results.push({ domain: 'company-context', status: company.isError ? 'failed' : 'passed' });
 
   for (const testCase of readCases) {
     const result = await client.callTool({
       name: 'stage1_read_economic',
       arguments: {
+        companyId: liveCompanyId(),
         serviceId: testCase.serviceId,
         pathTemplate: testCase.pathTemplate,
         pageSize: 1,
@@ -87,6 +91,7 @@ async function runReadAcceptance(client: Client): Promise<Record<string, unknown
   const filtered = await client.callTool({
     name: 'stage1_read_economic',
     arguments: {
+      companyId: liveCompanyId(),
       serviceId: 'rest',
       pathTemplate: '/customers',
       filter: 'name$like:*',
@@ -110,6 +115,7 @@ async function createAndVerifyInvoiceDraft(
   const creation = await client.callTool({
     name: 'stage1_create_sales_invoice_draft',
     arguments: {
+      companyId: liveCompanyId(),
       draft,
       reference: STAGE1_LIVE_TEST_REFERENCE,
       reason: 'Approved Stage 1 live acceptance invoice draft',
@@ -124,9 +130,9 @@ async function createAndVerifyInvoiceDraft(
 
   const readBack = requireSuccessfulToolResult(await client.callTool({
     name: 'stage1_get_entity',
-    arguments: { serviceId: 'rest', resource: 'invoices/drafts', number },
+    arguments: { companyId: liveCompanyId(), serviceId: 'rest', resource: 'invoices/drafts', number },
   }));
-  assertDraftReadBack(readBack.data, 'invoice');
+  assertDraftReadBack(nestedReadData(readBack), 'invoice');
 
   return {
     success: true,
@@ -152,6 +158,7 @@ async function createAndVerifyJournalDraft(
   const creation = await client.callTool({
     name: 'stage1_create_journal_draft_entry',
     arguments: {
+      companyId: liveCompanyId(),
       entry,
       reference: STAGE1_LIVE_TEST_REFERENCE,
       reason: 'Approved Stage 1 live acceptance journal draft',
@@ -166,9 +173,9 @@ async function createAndVerifyJournalDraft(
 
   const readBack = requireSuccessfulToolResult(await client.callTool({
     name: 'stage1_get_entity',
-    arguments: { serviceId: 'journals', resource: 'draft-entries', number },
+    arguments: { companyId: liveCompanyId(), serviceId: 'journals', resource: 'draft-entries', number },
   }));
-  assertDraftReadBack(readBack.data, 'journal');
+  assertDraftReadBack(nestedReadData(readBack), 'journal');
 
   return {
     success: true,
@@ -280,6 +287,15 @@ function parseCli(args: string[]): CliOptions {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function nestedReadData(value: Record<string, unknown>): unknown {
+  const result = isRecord(value.result) ? value.result : {};
+  return result.data;
+}
+
+function liveCompanyId(): string {
+  return process.env.ECONOMIC_DEFAULT_COMPANY_ID?.trim().toLowerCase() || 'default';
 }
 
 main().catch(error => {

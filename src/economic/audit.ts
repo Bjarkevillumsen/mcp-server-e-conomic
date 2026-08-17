@@ -8,6 +8,8 @@ export interface AuditEvent {
   userOid?: string;
   username?: string;
   role?: string;
+  companyId?: string;
+  companyDisplayName?: string;
   tool: string;
   action: string;
   serviceId?: string;

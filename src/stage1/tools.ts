@@ -10,6 +10,11 @@ import { primaryEconomicRole } from './auth.js';
 import { validateExpectedAgreement } from './agreement.js';
 import { STAGE1_ALLOWED_TOOLS, isStage1WriteTool, type Stage1ToolName } from './allowlist.js';
 import {
+  type ResolvedStage1Company,
+  type Stage1CompanyPermission,
+  type Stage1CompanyRegistry,
+} from './companies.js';
+import {
   categorizeError,
   economicStatusForResult,
   operationCategory,
@@ -35,6 +40,15 @@ const isoDateTimeSchema = z.string().refine(
   'Expected an ISO date or date-time.',
 );
 const currencySchema = z.string().trim().regex(/^[A-Z]{3}$/, 'Expected an uppercase ISO 4217 currency code.');
+const companyIdSchema = z.string().trim().toLowerCase().regex(
+  /^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/,
+  'Expected a companyId returned by stage1_list_companies.',
+);
+const companyInputShape = {
+  companyId: companyIdSchema.describe(
+    'Required e-conomic company ID. Call stage1_list_companies before choosing a company.',
+  ),
+};
 
 const commonReadShape = {
   filter: z.string().trim().max(4_000).optional(),
@@ -88,7 +102,6 @@ export type Stage1ToolAuthorizer = (toolName: Stage1ToolName) => void | Promise<
 
 export interface RegisterStage1ToolsOptions {
   authorize?: Stage1ToolAuthorizer;
-  expectedAgreementNumber?: string | number;
   policy?: EconomicPolicy;
   requestContext?: Stage1RequestContext;
   logger?: Stage1TechnicalLogger;
@@ -96,24 +109,32 @@ export interface RegisterStage1ToolsOptions {
 
 export function registerStage1Tools(
   server: McpServer,
-  client: EconomicClient,
+  companies: Stage1CompanyRegistry,
   options: RegisterStage1ToolsOptions = {},
 ): void {
-  registerTool(server, options, 'stage1_check_connection', {
-    title: 'Check Stage 1 e-conomic connection',
-    description: 'Validate the configured e-conomic credentials with a GET request.',
+  registerTool(server, options, 'stage1_list_companies', {
+    title: 'List authorized e-conomic companies',
+    description:
+      'List the e-conomic companies the signed-in user may access. Use the returned companyId in every other tool call.',
     inputSchema: {},
     annotations: readAnnotations(),
-  }, async () => jsonToolResult(await client.rest('/')));
+  }, async () => jsonToolResult({ companies: companies.listAuthorized(options.requestContext?.principal) }));
+
+  registerTool(server, options, 'stage1_check_connection', {
+    title: 'Check Stage 1 e-conomic connection',
+    description: 'Validate the selected e-conomic company credentials with a GET request.',
+    inputSchema: companyInputShape,
+    annotations: readAnnotations(),
+  }, async input => companyReadResult(companies, options, input.companyId, client => client.rest('/')));
 
   registerTool(server, options, 'stage1_get_company_context', {
     title: 'Get Stage 1 company context',
-    description: 'Read the connected company and agreement context from e-conomic.',
-    inputSchema: {},
+    description: 'Read the selected company and agreement context from e-conomic.',
+    inputSchema: companyInputShape,
     annotations: readAnnotations(),
-  }, async () => jsonToolResult(await client.rest('/self')));
+  }, async input => companyReadResult(companies, options, input.companyId, client => client.rest('/self')));
 
-  registerPagedReadTool(server, client, options, 'stage1_search_entities', {
+  registerPagedReadTool(server, companies, options, 'stage1_search_entities', {
     title: 'Search Stage 1 entities',
     description: 'Read an allowlisted e-conomic entity collection with bounded paging.',
     defaultServiceId: 'rest',
@@ -124,60 +145,61 @@ export function registerStage1Tools(
     title: 'Get one Stage 1 entity',
     description: 'Read one entity by catalog service, resource, and number. URLs are not accepted.',
     inputSchema: {
+      ...companyInputShape,
       serviceId: stage1ServiceIdSchema,
       resource: z.string().trim().min(1).max(200),
       number: numberSchema,
     },
     annotations: readAnnotations(),
-  }, async input => jsonToolResult(await executeStage1Read(client, {
-    serviceId: input.serviceId,
-    resource: input.resource,
-    number: input.number,
-  })));
+  }, async input => companyReadResult(companies, options, input.companyId, client => executeStage1Read(client, {
+      serviceId: input.serviceId,
+      resource: input.resource,
+      number: input.number,
+    })));
 
-  registerPagedReadTool(server, client, options, 'stage1_get_customer_overview', {
+  registerPagedReadTool(server, companies, options, 'stage1_get_customer_overview', {
     title: 'Get Stage 1 customer overview',
     description: 'Read customers and customer reference data.',
     defaultServiceId: 'customers',
     defaultResource: 'Customers',
   });
-  registerPagedReadTool(server, client, options, 'stage1_get_supplier_overview', {
+  registerPagedReadTool(server, companies, options, 'stage1_get_supplier_overview', {
     title: 'Get Stage 1 supplier overview',
     description: 'Read suppliers and supplier reference data.',
     defaultServiceId: 'rest',
     defaultResource: 'suppliers',
   });
-  registerPagedReadTool(server, client, options, 'stage1_get_product_overview', {
+  registerPagedReadTool(server, companies, options, 'stage1_get_product_overview', {
     title: 'Get Stage 1 product overview',
     description: 'Read products, groups, prices, and units.',
     defaultServiceId: 'rest',
     defaultResource: 'products',
   });
-  registerPagedReadTool(server, client, options, 'stage1_get_accounting_entries', {
+  registerPagedReadTool(server, companies, options, 'stage1_get_accounting_entries', {
     title: 'Get Stage 1 accounting entries',
     description: 'Read draft or booked accounting entries without posting changes.',
     defaultServiceId: 'booked-entries',
     defaultResource: 'booked-entries',
   });
-  registerPagedReadTool(server, client, options, 'stage1_get_sales_documents', {
+  registerPagedReadTool(server, companies, options, 'stage1_get_sales_documents', {
     title: 'Get Stage 1 sales documents',
     description: 'Read invoices, drafts, orders, or quotes.',
     defaultServiceId: 'rest',
     defaultResource: 'invoices/booked',
   });
-  registerPagedReadTool(server, client, options, 'stage1_get_project_overview', {
+  registerPagedReadTool(server, companies, options, 'stage1_get_project_overview', {
     title: 'Get Stage 1 project overview',
     description: 'Read projects, groups, employees, activities, and time-entry context.',
     defaultServiceId: 'projects',
     defaultResource: 'Projects',
   });
-  registerPagedReadTool(server, client, options, 'stage1_get_document', {
+  registerPagedReadTool(server, companies, options, 'stage1_get_document', {
     title: 'Get Stage 1 document metadata',
     description: 'Read allowlisted document metadata and references.',
     defaultServiceId: 'documents',
     defaultResource: 'AttachedDocuments',
   });
-  registerPagedReadTool(server, client, options, 'stage1_get_report', {
+  registerPagedReadTool(server, companies, options, 'stage1_get_report', {
     title: 'Get Stage 1 report data',
     description: 'Read accounts, booked entries, budgets, and accounting-year data.',
     defaultServiceId: 'accounts',
@@ -189,18 +211,20 @@ export function registerStage1Tools(
     description:
       'GET-only access to an upstream-cataloged relative path. Full URLs, hostnames, methods, traversal, unknown services, and webhooks are rejected.',
     inputSchema: {
+      ...companyInputShape,
       serviceId: stage1ServiceIdSchema,
       pathTemplate: z.string().trim().min(1).max(500),
       pathParams: pathParamsSchema,
       ...commonReadShape,
     },
     annotations: readAnnotations(),
-  }, async input => jsonToolResult(await executeStage1Read(client, input)));
+  }, async input => companyReadResult(companies, options, input.companyId, client => executeStage1Read(client, input)));
 
   registerTool(server, options, 'stage1_create_sales_invoice_draft', {
     title: 'Create an unbooked sales invoice draft',
     description: 'Create one validated e-conomic sales invoice draft. Never books or sends it.',
     inputSchema: {
+      ...companyInputShape,
       draft: invoiceDraftSchema,
       reference: z.string().trim().min(1).max(255).optional(),
       reason: z.string().trim().min(8).max(500),
@@ -208,11 +232,12 @@ export function registerStage1Tools(
     },
     annotations: writeAnnotations(),
   }, async input => {
+    const company = resolveCompany(companies, options, input.companyId, 'draft');
     const body = input.reference
       ? { ...input.draft, references: { ...(input.draft.references ?? {}), other: input.reference } }
       : input.draft;
     return jsonToolResult(await createStage1Draft({
-      client,
+      company,
       options,
       tool: 'stage1_create_sales_invoice_draft',
       type: 'sales_invoice_draft',
@@ -230,14 +255,17 @@ export function registerStage1Tools(
     title: 'Create an unbooked journal draft entry',
     description: 'Create one validated e-conomic journal draft entry. Never books it or registers payment.',
     inputSchema: {
+      ...companyInputShape,
       entry: journalDraftSchema,
       reference: z.string().trim().min(1).max(255).optional(),
       reason: z.string().trim().min(8).max(500),
       idempotencyKey: z.string().trim().min(8).max(200),
     },
     annotations: writeAnnotations(),
-  }, async input => jsonToolResult(await createStage1Draft({
-    client,
+  }, async input => {
+    const company = resolveCompany(companies, options, input.companyId, 'draft');
+    return jsonToolResult(await createStage1Draft({
+    company,
     options,
     tool: 'stage1_create_journal_draft_entry',
     type: 'journal_draft_entry',
@@ -248,11 +276,12 @@ export function registerStage1Tools(
     idempotencyKey: input.idempotencyKey,
     reference: input.reference ?? input.entry.text,
     numberFields: ['entryNumber', 'voucherNumber', 'number'],
-  })));
+    }));
+  });
 }
 
 interface DraftCreationInput {
-  client: EconomicClient;
+  company: ResolvedStage1Company;
   options: RegisterStage1ToolsOptions;
   tool: 'stage1_create_sales_invoice_draft' | 'stage1_create_journal_draft_entry';
   type: 'sales_invoice_draft' | 'journal_draft_entry';
@@ -276,7 +305,7 @@ async function createStage1Draft(input: DraftCreationInput): Promise<Record<stri
   }, input.options.policy);
 
   await writeAuditEvent({
-    ...auditIdentity(input.options),
+    ...draftAuditIdentity(input),
     tool: input.tool,
     action: 'policy_check',
     serviceId: input.serviceId,
@@ -304,12 +333,12 @@ async function createStage1Draft(input: DraftCreationInput): Promise<Record<stri
   let agreementNumber: string;
   try {
     const agreement = await validateExpectedAgreement(
-      input.client,
-      input.options.expectedAgreementNumber,
+      input.company.client,
+      input.company.agreementNumber,
     );
     agreementNumber = agreement.agreementNumber;
     await writeAuditEvent({
-      ...auditIdentity(input.options),
+      ...draftAuditIdentity(input),
       tool: input.tool,
       action: 'agreement_check',
       serviceId: 'rest',
@@ -324,7 +353,7 @@ async function createStage1Draft(input: DraftCreationInput): Promise<Record<stri
     });
   } catch (error) {
     await writeAuditEvent({
-      ...auditIdentity(input.options),
+      ...draftAuditIdentity(input),
       tool: input.tool,
       action: 'agreement_check',
       serviceId: 'rest',
@@ -341,7 +370,7 @@ async function createStage1Draft(input: DraftCreationInput): Promise<Record<stri
   }
 
   try {
-    const response = await callEndpoint(input.client, {
+    const response = await callEndpoint(input.company.client, {
       serviceId: operation.serviceId,
       method: operation.method,
       pathTemplate: operation.pathTemplate,
@@ -354,7 +383,7 @@ async function createStage1Draft(input: DraftCreationInput): Promise<Record<stri
     const reference = input.reference ?? extractFirstField(response, ['reference', 'self']);
 
     await writeAuditEvent({
-      ...auditIdentity(input.options),
+      ...draftAuditIdentity(input),
       tool: input.tool,
       action: 'create',
       serviceId: input.serviceId,
@@ -376,6 +405,7 @@ async function createStage1Draft(input: DraftCreationInput): Promise<Record<stri
 
     return {
       success: true,
+      company: publicCompany(input.company),
       type: input.type,
       ...(number !== undefined ? { number } : {}),
       status: 'draft',
@@ -383,7 +413,7 @@ async function createStage1Draft(input: DraftCreationInput): Promise<Record<stri
     };
   } catch (error) {
     await writeAuditEvent({
-      ...auditIdentity(input.options),
+      ...draftAuditIdentity(input),
       tool: input.tool,
       action: 'create',
       serviceId: input.serviceId,
@@ -408,9 +438,9 @@ async function createStage1Draft(input: DraftCreationInput): Promise<Record<stri
 
 function registerPagedReadTool(
   server: McpServer,
-  client: EconomicClient,
+  companies: Stage1CompanyRegistry,
   options: RegisterStage1ToolsOptions,
-  name: Exclude<Stage1ToolName, 'stage1_check_connection' | 'stage1_get_company_context' | 'stage1_get_entity' | 'stage1_read_economic' | 'stage1_create_sales_invoice_draft' | 'stage1_create_journal_draft_entry'>,
+  name: Exclude<Stage1ToolName, 'stage1_list_companies' | 'stage1_check_connection' | 'stage1_get_company_context' | 'stage1_get_entity' | 'stage1_read_economic' | 'stage1_create_sales_invoice_draft' | 'stage1_create_journal_draft_entry'>,
   definition: {
     title: string;
     description: string;
@@ -422,13 +452,19 @@ function registerPagedReadTool(
     title: definition.title,
     description: definition.description,
     inputSchema: {
+      ...companyInputShape,
       serviceId: stage1ServiceIdSchema.default(definition.defaultServiceId),
       resource: z.string().trim().min(1).max(200).default(definition.defaultResource),
       number: numberSchema.optional(),
       ...commonReadShape,
     },
     annotations: readAnnotations(),
-  }, async input => jsonToolResult(await executeStage1Read(client, input)));
+  }, async input => companyReadResult(
+    companies,
+    options,
+    input.companyId,
+    client => executeStage1Read(client, input),
+  ));
 }
 
 function registerTool(
@@ -452,6 +488,7 @@ function registerTool(
         requestId: options.requestContext?.requestId ?? 'stdio',
         principal: options.requestContext?.principal,
         tool: name,
+        companyId: companyIdFromToolArguments(args),
         operationCategory: operationCategory(name),
         policyResult: 'allowed',
         economicHttpStatus: economicStatusForResult(name),
@@ -465,6 +502,7 @@ function registerTool(
         requestId: options.requestContext?.requestId ?? 'stdio',
         principal: options.requestContext?.principal,
         tool: name,
+        companyId: companyIdFromToolArguments(args),
         operationCategory: operationCategory(name),
         policyResult: categorizeError(error) === 'policy_denied' ? 'denied' : 'not_applicable',
         economicHttpStatus: error instanceof EconomicHttpError ? error.status : undefined,
@@ -519,6 +557,51 @@ function auditIdentity(options: RegisterStage1ToolsOptions) {
     username: principal?.username,
     role: principal ? primaryEconomicRole(principal) : undefined,
   };
+}
+
+function draftAuditIdentity(input: DraftCreationInput) {
+  return {
+    ...auditIdentity(input.options),
+    companyId: input.company.companyId,
+    companyDisplayName: input.company.displayName,
+    agreementNumber: input.company.agreementNumber,
+  };
+}
+
+async function companyReadResult(
+  companies: Stage1CompanyRegistry,
+  options: RegisterStage1ToolsOptions,
+  companyId: string,
+  action: (client: EconomicClient) => Promise<unknown>,
+) {
+  const company = resolveCompany(companies, options, companyId, 'read');
+  const result = await action(company.client);
+  return jsonToolResult({
+    company: publicCompany(company),
+    result,
+  });
+}
+
+function resolveCompany(
+  companies: Stage1CompanyRegistry,
+  options: RegisterStage1ToolsOptions,
+  companyId: string,
+  permission: Stage1CompanyPermission,
+): ResolvedStage1Company {
+  return companies.resolve(companyId, options.requestContext?.principal, permission);
+}
+
+function publicCompany(company: ResolvedStage1Company) {
+  return {
+    companyId: company.companyId,
+    displayName: company.displayName,
+    agreementNumber: company.agreementNumber,
+  };
+}
+
+function companyIdFromToolArguments(args: any[]): string | undefined {
+  const input = args[0];
+  return isRecord(input) && typeof input.companyId === 'string' ? input.companyId : undefined;
 }
 
 function extractDraftResult(result: unknown): { number?: string | number; reference?: string | number } | undefined {
