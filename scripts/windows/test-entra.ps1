@@ -47,7 +47,7 @@ if ($Mode -ne 'NoToken') {
 $body = if ($Mode -eq 'ReaderWriteDenied') {
     @{ jsonrpc = '2.0'; id = 1; method = 'tools/call'; params = @{ name = 'stage1_create_sales_invoice_draft'; arguments = @{} } } | ConvertTo-Json -Depth 8 -Compress
 } else {
-    @{ jsonrpc = '2.0'; id = 1; method = 'initialize'; params = @{ protocolVersion = '2025-06-18'; capabilities = @{}; clientInfo = @{ name = 'stage1-entra-test'; version = '0.1.0' } } } | ConvertTo-Json -Depth 8 -Compress
+    @{ jsonrpc = '2.0'; id = 1; method = 'initialize'; params = @{ protocolVersion = '2025-06-18'; capabilities = @{}; clientInfo = @{ name = 'stage1-entra-test'; version = '0.1.1' } } } | ConvertTo-Json -Depth 8 -Compress
 }
 $result = Invoke-StatusRequest -Uri "$BaseUrl/mcp" -Method Post -Headers $headers -Body $body
 $expected = if ($Mode -in @('NoToken','ReaderWriteDenied')) { if ($Mode -eq 'NoToken') { 401 } else { 403 } } else { 200 }

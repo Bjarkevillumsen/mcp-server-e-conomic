@@ -4,7 +4,9 @@ import { describe, expect, it } from 'vitest';
 const requiredAssets = [
   'config/stage1.env.example',
   'config/cloudflared-ingress.example.yml',
+  'config/Caddyfile.example',
   'service/EconomicMcpService.xml',
+  'service/CaddyService.xml',
   'service/start-service.ps1',
   'service/WinSW-LICENSE.txt',
   'scripts/build-release.ps1',
@@ -13,12 +15,16 @@ const requiredAssets = [
   'scripts/windows/rollback.ps1',
   'scripts/windows/uninstall.ps1',
   'scripts/windows/healthcheck.ps1',
+  'scripts/windows/healthcheck-caddy.ps1',
+  'scripts/windows/install-caddy.ps1',
+  'scripts/windows/uninstall-caddy.ps1',
   'scripts/windows/test-economic.ps1',
   'scripts/windows/test-entra.ps1',
   'docs/ARCHITECTURE.md',
   'docs/NETWORK-DESIGN.md',
   'docs/ENTRA-ID-SETUP.md',
   'docs/CLOUDFLARE-TUNNEL.md',
+  'docs/CADDY-WINDOWS.md',
   'docs/SECURITY.md',
   'docs/THREAT-MODEL.md',
   'docs/WINDOWS-DEPLOYMENT.md',
@@ -48,5 +54,13 @@ describe('Stage 1 release assets', () => {
     expect(ci).toContain('scripts/build-release.ps1');
     expect(ci).not.toContain('acceptance:stage1');
     expect(ci).not.toContain('ECONOMIC_ALLOW_LIVE_WRITE_TESTS');
+  });
+
+  it('keeps the Caddy origin loopback-only and the admin endpoint local', () => {
+    const caddyfile = readFileSync('config/Caddyfile.example', 'utf8');
+    expect(caddyfile).toContain('reverse_proxy 127.0.0.1:3000');
+    expect(caddyfile).toContain('admin 127.0.0.1:2019');
+    expect(caddyfile).toContain('auto_https disable_redirects');
+    expect(caddyfile).not.toContain('log_credentials');
   });
 });

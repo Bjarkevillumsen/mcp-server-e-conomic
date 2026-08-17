@@ -11,9 +11,10 @@
 - Entra IDs, e-conomic tokens, public hostname/origin, and approved CORS origins.
 
 The package contains compiled application files, production-only npm
-dependencies, deployment scripts, configuration templates, documentation, and a
-checksum-pinned WinSW wrapper. Codex, TypeScript, npm, build tools, and source are
-not required on the production server.
+dependencies, deployment scripts, configuration templates, documentation, a
+checksum-pinned WinSW wrapper, and the checksum-verified Caddy Windows binary.
+Codex, TypeScript, npm, build tools, and source are not required on the
+production server.
 
 ## Filesystem and service identity
 
@@ -22,6 +23,7 @@ Installation creates:
 ```text
 C:\Program Files\EconomicMcp\
     app\
+    caddy\
     service\
     scripts\
     release-manifest.json
@@ -55,8 +57,10 @@ stopped and creates a placeholder `stage1.env`; edit the protected ProgramData
 copy before starting. The application fails closed if required values or policy
 are missing/unsafe.
 
-After installation, configure Cloudflare Tunnel, then verify localhost binding,
-health, OAuth metadata, no-token 401, Entra role behavior, and e-conomic reads.
+After installation, configure either Cloudflare Tunnel or Caddy. For the Caddy
+path, follow `CADDY-WINDOWS.md` and open/forward only TCP 443 after local checks.
+Then verify localhost binding, health, OAuth metadata, no-token 401, Entra role
+behavior, and e-conomic reads.
 
 ## Update and rollback
 
@@ -90,4 +94,6 @@ only under an approved retention/change procedure.
 Uninstall removes the service and Program Files payload but preserves config,
 logs, audit, and releases by default. Permanent data deletion requires both
 `-RemoveData -ConfirmDataRemoval` and PowerShell confirmation. Uninstall does not
-remove `cloudflared` or revoke external credentials; perform those separately.
+remove `cloudflared` or Caddy. Remove the selected public transport separately;
+Caddy's dedicated uninstall script preserves certificate state and logs unless
+explicit data removal is confirmed.

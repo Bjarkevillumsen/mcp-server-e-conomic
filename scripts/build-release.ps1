@@ -1,19 +1,24 @@
 [CmdletBinding()]
 param(
     [string]$Version,
-    [string]$OutputDirectory = (Join-Path $PSScriptRoot '..\artifacts'),
-    [string]$WinSWPath
+    [string]$OutputDirectory,
+    [string]$WinSWPath,
+    [string]$CaddyZipPath
 )
 
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 $repositoryRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
+if (-not $OutputDirectory) { $OutputDirectory = Join-Path $repositoryRoot 'artifacts' }
 if (-not $Version) { $Version = (Get-Content -LiteralPath (Join-Path $repositoryRoot 'STAGE1_VERSION') -Raw).Trim() }
 if ($Version -notmatch '^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$') { throw 'Version must be a semantic version without a leading v.' }
 
 $winSwVersion = '2.12.0'
 $winSwSha256 = '05B82D46AD331CC16BDC00DE5C6332C1EF818DF8CEEFCD49C726553209B3A0DA'
 $winSwUrl = "https://github.com/winsw/winsw/releases/download/v$winSwVersion/WinSW-x64.exe"
+$caddyVersion = '2.11.4'
+$caddyZipSha256 = '1708333F79E274C7697285AFE6D592AB39314E0B131E9EC6BEA08AD27DF62EBF'
+$caddyZipUrl = "https://github.com/caddyserver/caddy/releases/download/v$caddyVersion/caddy_${caddyVersion}_windows_amd64.zip"
 $temporaryRoot = Join-Path ([IO.Path]::GetTempPath()) "EconomicMcpRelease-$([Guid]::NewGuid().ToString('N'))"
 $stageRoot = Join-Path $temporaryRoot 'package'
 $outputRoot = [IO.Path]::GetFullPath($OutputDirectory)
@@ -35,7 +40,7 @@ try {
     } finally { Pop-Location }
 
     New-Item -ItemType Directory -Path $stageRoot -Force | Out-Null
-    foreach ($directory in @('app','service','scripts','config','docs')) {
+    foreach ($directory in @('app','service','scripts','config','docs','caddy')) {
         New-Item -ItemType Directory -Path (Join-Path $stageRoot $directory) -Force | Out-Null
     }
 
@@ -53,6 +58,7 @@ try {
     Copy-Item -LiteralPath (Join-Path $repositoryRoot 'config\economic-policy.stage1.json') -Destination (Join-Path $stageRoot 'config')
     Copy-Item -LiteralPath (Join-Path $repositoryRoot 'config\stage1.env.example') -Destination (Join-Path $stageRoot 'config')
     Copy-Item -LiteralPath (Join-Path $repositoryRoot 'config\cloudflared-ingress.example.yml') -Destination (Join-Path $stageRoot 'config')
+    Copy-Item -LiteralPath (Join-Path $repositoryRoot 'config\Caddyfile.example') -Destination (Join-Path $stageRoot 'config')
     Copy-Item -Path (Join-Path $repositoryRoot 'docs\*') -Destination (Join-Path $stageRoot 'docs') -Recurse
     foreach ($file in @('LICENSE','NOTICE','THIRD_PARTY_NOTICES.md','UPSTREAM_COMMIT','STAGE1_VERSION')) {
         Copy-Item -LiteralPath (Join-Path $repositoryRoot $file) -Destination $stageRoot
@@ -68,13 +74,37 @@ try {
     $actualWinSwHash = (Get-FileHash -LiteralPath $resolvedWinSW -Algorithm SHA256).Hash
     if ($actualWinSwHash -ne $winSwSha256) { throw 'WinSW SHA-256 verification failed.' }
     Copy-Item -LiteralPath $resolvedWinSW -Destination (Join-Path $stageRoot 'service\EconomicMcpService.exe')
+    Copy-Item -LiteralPath $resolvedWinSW -Destination (Join-Path $stageRoot 'service\CaddyService.exe')
+
+    $resolvedCaddyZip = if ($CaddyZipPath) {
+        (Resolve-Path -LiteralPath $CaddyZipPath).Path
+    } else {
+        $download = Join-Path $temporaryRoot 'caddy-windows-amd64.zip'
+        Invoke-WebRequest -UseBasicParsing -Uri $caddyZipUrl -OutFile $download
+        $download
+    }
+    $actualCaddyZipHash = (Get-FileHash -LiteralPath $resolvedCaddyZip -Algorithm SHA256).Hash
+    if ($actualCaddyZipHash -ne $caddyZipSha256) { throw 'Caddy ZIP SHA-256 verification failed.' }
+    $caddyExpanded = Join-Path $temporaryRoot 'caddy-expanded'
+    Expand-Archive -LiteralPath $resolvedCaddyZip -DestinationPath $caddyExpanded
+    $caddyExe = Join-Path $caddyExpanded 'caddy.exe'
+    $caddyLicense = Join-Path $caddyExpanded 'LICENSE'
+    if (-not (Test-Path -LiteralPath $caddyExe -PathType Leaf) -or -not (Test-Path -LiteralPath $caddyLicense -PathType Leaf)) {
+        throw 'The verified Caddy archive does not contain the expected executable and license.'
+    }
+    Copy-Item -LiteralPath $caddyExe -Destination (Join-Path $stageRoot 'caddy\caddy.exe')
+    Copy-Item -LiteralPath $caddyLicense -Destination (Join-Path $stageRoot 'caddy\Caddy-LICENSE.txt')
 
     $upstreamCommit = (Get-Content -LiteralPath (Join-Path $repositoryRoot 'UPSTREAM_COMMIT') -Raw).Trim()
     $repositoryCommit = (& git -C $repositoryRoot rev-parse HEAD).Trim()
     $dirty = [bool](& git -C $repositoryRoot status --porcelain)
+    $stagePrefix = [IO.Path]::GetFullPath($stageRoot).TrimEnd('\') + '\'
     $hashes = Get-ChildItem -LiteralPath $stageRoot -File -Recurse | Sort-Object FullName | ForEach-Object {
+        if (-not $_.FullName.StartsWith($stagePrefix, [StringComparison]::OrdinalIgnoreCase)) {
+            throw 'Release staging contained a file outside the fixed staging root.'
+        }
         [ordered]@{
-            path = [IO.Path]::GetRelativePath($stageRoot, $_.FullName).Replace('\','/')
+            path = $_.FullName.Substring($stagePrefix.Length).Replace('\','/')
             sha256 = (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
         }
     }
@@ -87,6 +117,7 @@ try {
         upstreamCommit = $upstreamCommit
         nodeEngine = '>=20.11'
         winSw = [ordered]@{ version = $winSwVersion; sha256 = $winSwSha256.ToLowerInvariant(); source = $winSwUrl }
+        caddy = [ordered]@{ version = $caddyVersion; zipSha256 = $caddyZipSha256.ToLowerInvariant(); source = $caddyZipUrl }
         files = @($hashes)
     }
     $manifest | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath (Join-Path $stageRoot 'release-manifest.json') -Encoding utf8

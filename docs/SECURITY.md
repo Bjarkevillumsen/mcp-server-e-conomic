@@ -49,14 +49,16 @@ directories.
 
 CI runs clean install, typecheck, 147+ unit/security tests, build, and production
 dependency audit. Release packaging re-runs the checks, installs production-only
-dependencies, verifies the pinned WinSW 2.12.0 SHA-256, and records per-file
-hashes in `release-manifest.json`. Tagged releases are immutable inputs to the
-Windows change process. Verify the GitHub release and manifest before deployment.
+dependencies, verifies the pinned WinSW 2.12.0 and Caddy 2.11.4 archive SHA-256
+values, and records per-file hashes in `release-manifest.json`. Tagged releases
+are immutable inputs to the Windows change process. Verify the GitHub release and
+manifest before deployment.
 
 ## Incident actions
 
 If any token may be exposed: stop EconomicMcp, revoke/rotate the e-conomic app or
-agreement token as applicable, rotate the Cloudflare tunnel token when affected,
-revoke Entra sessions/assignments as applicable, inspect redacted technical and
+agreement token as applicable, rotate the Cloudflare tunnel token when affected
+or protect/reissue Caddy certificate state when applicable, revoke Entra
+sessions/assignments as applicable, inspect redacted technical and
 write-audit logs, redeploy from a trusted release, and retest all boundaries.
 Do not delete audit evidence during response.
