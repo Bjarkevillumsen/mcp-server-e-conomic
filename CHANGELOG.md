@@ -32,6 +32,11 @@ Conditional booking (booking duty) — booking stays denied by default:
 
 ## Unreleased
 
+- Added a fail-closed multi-company Stage 1 registry for 1-100 e-conomic
+  agreements, isolated credentials and expected agreement numbers per company,
+  per-company user ACLs, `stage1_list_companies`, mandatory `companyId` on every
+  business tool, company-tagged logs/audit, and a hidden-input Windows
+  onboarding/rotation helper.
 - Fixed Claude/Entra OAuth interoperability for remote MCP: protected-resource
   metadata and `WWW-Authenticate` now advertise the public HTTPS MCP resource
   and its fully qualified scope. Documented the required Entra v2 access-token

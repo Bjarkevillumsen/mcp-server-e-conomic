@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 
 const requiredAssets = [
   'config/stage1.env.example',
+  'config/companies.stage1.example.json',
   'config/cloudflared-ingress.example.yml',
   'config/Caddyfile.example',
   'service/EconomicMcpService.xml',
@@ -20,6 +21,7 @@ const requiredAssets = [
   'scripts/windows/uninstall-caddy.ps1',
   'scripts/windows/test-economic.ps1',
   'scripts/windows/test-entra.ps1',
+  'scripts/windows/set-company.ps1',
   'docs/ARCHITECTURE.md',
   'docs/NETWORK-DESIGN.md',
   'docs/ENTRA-ID-SETUP.md',
@@ -40,12 +42,15 @@ describe('Stage 1 release assets', () => {
   it('keeps the committed environment file placeholder-only and localhost-bound', () => {
     const example = readFileSync('config/stage1.env.example', 'utf8');
     expect(example).toContain('MCP_HTTP_HOST=127.0.0.1');
-    expect(example).toContain('ECONOMIC_EXPECTED_AGREEMENT_NUMBER=1382005');
+    expect(example).toContain('ECONOMIC_COMPANY_REGISTRY_PATH=C:\\ProgramData\\EconomicMcp\\config\\companies.stage1.json');
     expect(example).toContain('ECONOMIC_ENABLE_BOOKING=false');
     expect(example).toMatch(/^ENTRA_TENANT_ID=$/m);
     expect(example).toMatch(/^ENTRA_API_CLIENT_ID=$/m);
-    expect(example).toMatch(/^ECONOMIC_APP_SECRET_TOKEN=$/m);
-    expect(example).toMatch(/^ECONOMIC_AGREEMENT_GRANT_TOKEN=$/m);
+    expect(example).not.toMatch(/^ECONOMIC_APP_SECRET_TOKEN=/m);
+    expect(example).not.toMatch(/^ECONOMIC_AGREEMENT_GRANT_TOKEN=/m);
+    const companies = readFileSync('config/companies.stage1.example.json', 'utf8');
+    expect(companies).toContain('REPLACE_WITH_APP_SECRET_TOKEN');
+    expect(companies).toContain('REPLACE_WITH_AGREEMENT_GRANT_TOKEN');
   });
 
   it('keeps normal CI free of live acceptance commands', () => {

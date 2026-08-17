@@ -5,7 +5,6 @@ import {
   type ServerResponse,
 } from 'node:http';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
-import { EconomicClient } from '../economic/client.js';
 import { HttpRequestError, readJsonBody } from './http-helpers.js';
 import {
   AuthenticationError,
@@ -22,20 +21,27 @@ import {
 } from '../stage1/oauth-metadata.js';
 import { createStage1Server } from '../stage1/server.js';
 import { Stage1TechnicalLogger } from '../stage1/logging.js';
+import {
+  Stage1CompanyRegistry,
+  type Stage1CompanyClientFactory,
+} from '../stage1/companies.js';
 import type { Stage1StartupConfig } from '../stage1/startup.js';
 
 export interface CreateStage1HttpServerOptions {
   config: Stage1StartupConfig;
   tokenValidator?: EntraTokenValidator;
   logger?: Stage1TechnicalLogger;
-  clientFactory?: () => EconomicClient;
+  clientFactory?: Stage1CompanyClientFactory;
 }
 
 export function createStage1HttpServer(options: CreateStage1HttpServerOptions) {
   const { config } = options;
   const tokenValidator = options.tokenValidator ?? createEntraTokenValidator(config.entra);
   const logger = options.logger ?? new Stage1TechnicalLogger();
-  const clientFactory = options.clientFactory ?? (() => new EconomicClient({ timeoutMs: config.requestTimeoutMs }));
+  const companyRegistry = new Stage1CompanyRegistry(config.companies, {
+    timeoutMs: config.requestTimeoutMs,
+    ...(options.clientFactory ? { clientFactory: options.clientFactory } : {}),
+  });
 
   const httpServer = createNodeServer(async (req, res) => {
     const requestId = requestIdFor(req);
@@ -88,8 +94,7 @@ export function createStage1HttpServer(options: CreateStage1HttpServerOptions) {
       }
 
       const mcpServer = createStage1Server({
-        client: clientFactory(),
-        expectedAgreementNumber: config.expectedAgreementNumber,
+        companyRegistry,
         authorize: makeToolAuthorizer(principal, config.entra.requiredScope),
         requestContext: { requestId, principal },
         logger,

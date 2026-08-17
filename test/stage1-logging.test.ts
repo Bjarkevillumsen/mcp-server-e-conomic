@@ -28,6 +28,7 @@ describe('Stage 1 structured logging and audit', () => {
         scopes: ['Mcp.Access'],
       },
       tool: 'stage1_create_sales_invoice_draft',
+      companyId: 'squaremeter',
       operationCategory: 'draft_write',
       policyResult: 'allowed',
       economicHttpStatus: 201,
@@ -47,6 +48,7 @@ describe('Stage 1 structured logging and audit', () => {
       userOid: 'oid-1',
       role: ECONOMIC_DRAFT_CREATOR_ROLE,
       tool: 'stage1_create_sales_invoice_draft',
+      companyId: 'squaremeter',
       operationCategory: 'draft_write',
       economicHttpStatus: 201,
       draftNumber: 12345,
@@ -72,6 +74,8 @@ describe('Stage 1 structured logging and audit', () => {
         tenantId: 'tenant-1',
         userOid: 'oid-1',
         role: ECONOMIC_DRAFT_CREATOR_ROLE,
+        companyId: 'squaremeter',
+        companyDisplayName: 'SquareMeter',
         tool: 'stage1_create_journal_draft_entry',
         action: 'create',
         allowed: true,
@@ -90,6 +94,7 @@ describe('Stage 1 structured logging and audit', () => {
       const record = JSON.parse(content.trim()) as Record<string, unknown>;
       expect(record).toMatchObject({
         requestId: 'request-2',
+        companyId: 'squaremeter',
         agreementNumber: 1382005,
         draftNumber: 54321,
         result: 'success',

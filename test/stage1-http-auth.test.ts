@@ -27,7 +27,14 @@ const config: Stage1StartupConfig = {
   allowedOrigins: ['https://client.example.test'],
   publicBaseUrl: 'https://mcp.example.test',
   entra,
-  expectedAgreementNumber: '1382005',
+  companies: [{
+    companyId: 'squaremeter',
+    displayName: 'SquareMeter',
+    agreementNumber: '1382005',
+    enabled: true,
+    access: { readUserOids: ['*'], draftUserOids: ['*'] },
+    credentials: { appSecretToken: 'app', agreementGrantToken: 'grant' },
+  }],
 };
 
 let baseUrl = '';
@@ -161,11 +168,15 @@ describe('Stage 1 protected HTTP resource', () => {
   it('returns a generic 500 response without stack traces or internal paths', async () => {
     const failingServer = createStage1HttpServer({
       config,
-      tokenValidator,
-      logger: new Stage1TechnicalLogger(() => undefined),
-      clientFactory: () => {
-        throw new Error('failure at C:\\Sensitive\\internal-file.ts:42');
+      tokenValidator: {
+        async validateAuthorizationHeader() {
+          throw new Error('failure at C:\\Sensitive\\internal-file.ts:42');
+        },
+        async validateToken() {
+          throw new Error('failure at C:\\Sensitive\\internal-file.ts:42');
+        },
       },
+      logger: new Stage1TechnicalLogger(() => undefined),
     });
     await new Promise<void>((resolve, reject) => {
       failingServer.once('error', reject);

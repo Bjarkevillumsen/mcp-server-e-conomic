@@ -2,15 +2,17 @@
 
 ## Enforced boundary
 
-Stage 1 exposes 13 catalog-bounded read tools and exactly two draft mutations.
+Stage 1 exposes 14 read tools (including the authorized company list) and
+exactly two draft mutations.
 It does not expose the upstream generic write/commit/booking tools. The generic
 Stage 1 reader has no method or URL input, accepts only known e-conomic catalog
 paths, rejects traversal/hosts/schemes/webhooks, and caps a response at 500
 records.
 
-Three independent controls enforce the write boundary: exact MCP registration,
-per-call Entra RBAC, and a hard-coded Stage 1 operation map layered over the
-upstream policy. The policy file cannot broaden the hard-coded map. Booking
+Four independent controls enforce the write boundary: exact MCP registration,
+per-call Entra RBAC, company-specific access control/credential selection, and
+a hard-coded Stage 1 operation map layered over the upstream policy. The policy
+file cannot broaden the hard-coded map. Booking
 enabled at runtime or in policy causes denial; production startup rejects
 `ECONOMIC_ENABLE_BOOKING=true`.
 
@@ -29,7 +31,8 @@ enabled at runtime or in policy causes denial; production startup rejects
 
 ## Secrets and logs
 
-Secrets come from `C:\ProgramData\EconomicMcp\config\stage1.env`, whose ACL is
+Company secrets come from the 1-100 entry
+`C:\ProgramData\EconomicMcp\config\companies.stage1.json` registry. Its ACL is
 limited to SYSTEM, administrators, and read access for the dedicated virtual
 service account. They are never MCP inputs or committed files. Production
 rejects alternate e-conomic hosts so credentials cannot be redirected.
@@ -47,7 +50,7 @@ directories.
 
 ## Dependency and release integrity
 
-CI runs clean install, typecheck, 147+ unit/security tests, build, and production
+CI runs clean install, typecheck, 191+ unit/security tests, build, and production
 dependency audit. Release packaging re-runs the checks, installs production-only
 dependencies, verifies the pinned WinSW 2.12.0 and Caddy 2.11.4 archive SHA-256
 values, and records per-file hashes in `release-manifest.json`. Tagged releases

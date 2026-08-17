@@ -57,6 +57,17 @@ Exit criteria: the ZIP builds without secrets, contains required runtime and
 service files, retains a rollback path, and the full non-live CI command set
 passes.
 
+## Multi-company extension
+
+- Add a fail-closed, protected registry for 1-100 agreements with unique
+  `companyId` and agreement number plus isolated token pairs.
+- Add `stage1_list_companies`, require `companyId` everywhere else, and enforce
+  per-company user-object ACLs after global Entra RBAC.
+- Tag technical/audit events with company identity, verify each draft against
+  the selected agreement, and provide a hidden-input Windows onboarding helper.
+- Prove the 100-entry limit, cross-company credential isolation, ACL filtering,
+  secret non-disclosure, and 101st-entry rejection with automated tests.
+
 ## Live acceptance boundary
 
 Live tests are never automatic. No write runs unless all of these are true:

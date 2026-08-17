@@ -8,31 +8,34 @@
   Tunnel. The Node process is reachable only on `127.0.0.1`.
 - Microsoft Entra ID is the sole application identity provider. Only one
   configured tenant is trusted.
-- e-conomic credentials are process secrets and never MCP inputs.
+- e-conomic credentials are protected registry secrets and never MCP inputs.
 - e-conomic remains the system of record and its existing draft UI is the
   human approval boundary.
 
 ## Independent controls
 
-Stage 1 relies on three independent authorization layers:
+Stage 1 relies on four independent authorization layers:
 
 1. The MCP server registers only the exact `STAGE1_ALLOWED_TOOLS` list.
 2. Every invocation validates a signed Entra token and maps its scope and app
    role to the requested tool.
-3. The e-conomic policy independently permits only the two named draft POST
+3. The selected `companyId` must exist, be enabled, and permit the signed-in
+   Entra user object ID for the requested read/draft access.
+4. The e-conomic policy independently permits only the two named draft POST
    operations and denies booking, payment, sending, deletion, arbitrary writes,
    and master-data mutation.
 
 Agreement validation is an additional write precondition. Before a live write,
 the service reads `/self` (or the catalog equivalent) and requires the returned
-agreement number to equal `ECONOMIC_EXPECTED_AGREEMENT_NUMBER`. A mismatch fails
-before an e-conomic mutation is sent.
+agreement number to equal the selected registry entry. A mismatch fails before
+an e-conomic mutation is sent.
 
 ## Fail-closed assumptions
 
 Production startup is rejected if the Stage 1 profile, policy file, Entra
-tenant/audience, e-conomic credentials, expected agreement, or localhost bind
-is missing or unsafe. `ECONOMIC_ENABLE_BOOKING=true` is always fatal. Token
+tenant/audience, 1-100 valid company entries, company credentials/ACLs, or
+localhost bind is missing or unsafe. Duplicate IDs and agreement numbers are
+rejected. `ECONOMIC_ENABLE_BOOKING=true` is always fatal. Token
 verification fails closed when OIDC metadata or signing keys cannot be loaded.
 
 JWT checks cover signature, issuer, tenant (`tid`), audience (`aud`), expiry,

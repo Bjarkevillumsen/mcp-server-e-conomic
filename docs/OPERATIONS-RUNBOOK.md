@@ -29,6 +29,29 @@ WinSW log filenames can include rolled dates. Use `Get-ChildItem` to locate the
 latest file. Do not print `stage1.env`. Startup diagnostics name missing settings
 but do not reveal values.
 
+## Add or update a company
+
+Stop the service and run the protected interactive helper. Token input is hidden
+and is not placed in PowerShell history:
+
+```powershell
+Stop-Service EconomicMcp
+& 'C:\Program Files\EconomicMcp\scripts\windows\set-company.ps1' `
+  -CompanyId 'customer-a' `
+  -DisplayName 'Customer A ApS' `
+  -AgreementNumber '1234567' `
+  -ReadUserOid '*' `
+  -DraftUserOid '*' `
+  -Start
+```
+
+`*` means any user who already has the corresponding global Entra role. For
+company-specific access, replace it with one or more Entra user object IDs.
+Running the same `CompanyId` rotates that company's token pair atomically.
+Agreement numbers and company IDs must be unique; the 101st company is rejected.
+After a change, call `stage1_list_companies`, then check the selected company's
+context. Do not use a draft write as a health test.
+
 ## Common failures
 
 - **Service restart loop:** inspect wrapper stderr, confirm Node path, environment
@@ -42,8 +65,9 @@ but do not reveal values.
   or unavailable JWKS. Check time and tenant metadata without logging the token.
 - **403:** token is valid but lacks `Mcp.Access`, an Economic role, or the role for
   the requested tool; also check Enterprise Application assignment.
-- **e-conomic 401/403:** rotate/check app and agreement grant tokens and API app
-  permissions. Do not weaken the MCP role/policy.
+- **e-conomic 401/403:** confirm `companyId`, then rotate/check that registry
+  entry's app and agreement grant tokens and API app permissions. Do not weaken
+  the MCP role/policy.
 - **Module 403/404:** confirm customer subscription. Optional unsupported modules
   are recorded as such during acceptance.
 

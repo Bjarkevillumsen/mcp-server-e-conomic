@@ -11,6 +11,8 @@ beforeEach(() => {
   process.env.ECONOMIC_ENABLE_WRITES = 'true';
   process.env.ECONOMIC_ENABLE_BOOKING = 'false';
   process.env.ECONOMIC_EXPECTED_AGREEMENT_NUMBER = '1382005';
+  process.env.ECONOMIC_DEFAULT_COMPANY_ID = 'squaremeter';
+  process.env.ECONOMIC_DEFAULT_COMPANY_NAME = 'SquareMeter';
   delete process.env.ECONOMIC_POLICY_PATH;
   delete process.env.ECONOMIC_AUDIT_LOG;
 });
@@ -25,19 +27,61 @@ describe('Stage 1 MCP profile', () => {
       const result = await mcpClient.listTools();
       expect(result.tools.map(tool => tool.name)).toEqual([...STAGE1_ALLOWED_TOOLS]);
       expect(result.tools.some(tool => /book|payment|delete|commit|economic_call_endpoint/.test(tool.name))).toBe(false);
+      for (const tool of result.tools) {
+        const properties = (tool.inputSchema.properties ?? {}) as Record<string, unknown>;
+        if (tool.name === 'stage1_list_companies') {
+          expect(properties).not.toHaveProperty('companyId');
+        } else {
+          expect(properties).toHaveProperty('companyId');
+          expect(tool.inputSchema.required).toContain('companyId');
+        }
+      }
 
       const genericRead = result.tools.find(tool => tool.name === 'stage1_read_economic');
       const properties = (genericRead?.inputSchema.properties ?? {}) as Record<string, unknown>;
+      expect(properties).toHaveProperty('companyId');
       expect(properties).not.toHaveProperty('method');
       expect(properties).not.toHaveProperty('url');
       expect(properties).not.toHaveProperty('hostname');
     });
   });
 
+  it('lists the authorized company without exposing either credential', async () => {
+    await withStage1Client(async mcpClient => {
+      const result = await mcpClient.callTool({ name: 'stage1_list_companies', arguments: {} });
+      const text = JSON.stringify(resultJson(result));
+      expect(resultJson(result)).toEqual({
+        companies: [{
+          companyId: 'squaremeter',
+          displayName: 'SquareMeter',
+          agreementNumber: '1382005',
+          permissions: { read: true, draft: true },
+        }],
+      });
+      expect(text).not.toContain('app');
+      expect(text).not.toContain('grant');
+    });
+  });
+
+  it('rejects an unknown company before any e-conomic request', async () => {
+    const fetchMock = vi.fn<typeof fetch>();
+    await withStage1Client(async mcpClient => {
+      const result = await mcpClient.callTool({
+        name: 'stage1_check_connection',
+        arguments: { companyId: 'unknown-company' },
+      });
+      expect(result.isError).toBe(true);
+      expect(fetchMock).not.toHaveBeenCalled();
+    }, fetchMock as unknown as typeof fetch);
+  });
+
   it('runs the authorization hook for every tool invocation', async () => {
     const authorize = vi.fn();
     await withStage1Client(async mcpClient => {
-      const result = await mcpClient.callTool({ name: 'stage1_check_connection', arguments: {} });
+      const result = await mcpClient.callTool({
+        name: 'stage1_check_connection',
+        arguments: { companyId: 'squaremeter' },
+      });
       expect(result.isError).not.toBe(true);
       expect(authorize).toHaveBeenCalledExactlyOnceWith('stage1_check_connection');
     }, async () => Response.json({ ok: true }), authorize);
@@ -54,6 +98,7 @@ describe('Stage 1 MCP profile', () => {
       const result = await mcpClient.callTool({
         name: 'stage1_read_economic',
         arguments: {
+          companyId: 'squaremeter',
           serviceId: 'rest',
           pathTemplate: '/customers',
           pageSize: 200,
@@ -62,12 +107,14 @@ describe('Stage 1 MCP profile', () => {
         },
       });
       const parsed = resultJson(result) as {
-        data: { collection: unknown[] };
-        page: { returnedRecords: number; truncated: boolean };
+        result: {
+          data: { collection: unknown[] };
+          page: { returnedRecords: number; truncated: boolean };
+        };
       };
 
-      expect(parsed.data.collection).toHaveLength(500);
-      expect(parsed.page).toMatchObject({ returnedRecords: 500, truncated: true });
+      expect(parsed.result.data.collection).toHaveLength(500);
+      expect(parsed.result.page).toMatchObject({ returnedRecords: 500, truncated: true });
       expect(requests[0]?.method).toBe('GET');
       expect(requests[0]?.url).toContain('/customers?');
       expect(requests[0]?.url).toContain('pagesize=200');
@@ -81,6 +128,7 @@ describe('Stage 1 MCP profile', () => {
       const result = await mcpClient.callTool({
         name: 'stage1_read_economic',
         arguments: {
+          companyId: 'squaremeter',
           serviceId: 'rest',
           pathTemplate: 'https://evil.example/customers',
         },
@@ -108,6 +156,7 @@ describe('Stage 1 MCP profile', () => {
       const result = await mcpClient.callTool({
         name: 'stage1_create_sales_invoice_draft',
         arguments: {
+          companyId: 'squaremeter',
           draft: validInvoiceDraft(),
           reference: 'MCP-STAGE1-TEST',
           reason: 'Controlled Stage 1 draft test',
@@ -118,6 +167,7 @@ describe('Stage 1 MCP profile', () => {
       expect(result.isError).not.toBe(true);
       expect(resultJson(result)).toEqual({
         success: true,
+        company: { companyId: 'squaremeter', displayName: 'SquareMeter', agreementNumber: '1382005' },
         type: 'sales_invoice_draft',
         number: 12345,
         status: 'draft',
@@ -144,6 +194,7 @@ describe('Stage 1 MCP profile', () => {
       const result = await mcpClient.callTool({
         name: 'stage1_create_journal_draft_entry',
         arguments: {
+          companyId: 'squaremeter',
           entry: {
             entryTypeNumber: 1,
             journalNumber: 1,
@@ -161,6 +212,7 @@ describe('Stage 1 MCP profile', () => {
       expect(result.isError).not.toBe(true);
       expect(resultJson(result)).toEqual({
         success: true,
+        company: { companyId: 'squaremeter', displayName: 'SquareMeter', agreementNumber: '1382005' },
         type: 'journal_draft_entry',
         number: 54321,
         status: 'draft',
@@ -184,6 +236,7 @@ describe('Stage 1 MCP profile', () => {
       const result = await mcpClient.callTool({
         name: 'stage1_create_sales_invoice_draft',
         arguments: {
+          companyId: 'squaremeter',
           draft: validInvoiceDraft(),
           reason: 'Agreement mismatch regression test',
           idempotencyKey: 'invoice-test-0002',

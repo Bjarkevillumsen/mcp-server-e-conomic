@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "companies": [
+    {
+      "companyId": "squaremeter",
+      "displayName": "SquareMeter",
+      "agreementNumber": "1382005",
+      "enabled": true,
+      "access": {
+        "readUserOids": ["*"],
+        "draftUserOids": ["*"]
+      },
+      "credentials": {
+        "appSecretToken": "REPLACE_WITH_APP_SECRET_TOKEN",
+        "agreementGrantToken": "REPLACE_WITH_AGREEMENT_GRANT_TOKEN"
+      }
+    }
+  ]
+}

@@ -54,7 +54,8 @@ function Test-EconomicMcpPackageRoot {
         'caddy\Caddy-LICENSE.txt',
         'config\Caddyfile.example',
         'config\economic-policy.stage1.json',
-        'config\stage1.env.example'
+        'config\stage1.env.example',
+        'config\companies.stage1.example.json'
     )
     foreach ($relative in $required) {
         if (-not (Test-Path -LiteralPath (Join-Path $Root $relative))) {
@@ -139,5 +140,9 @@ function Set-EconomicMcpAcls {
     $environmentFile = Join-Path $dataRoot 'config\stage1.env'
     if (Test-Path -LiteralPath $environmentFile) {
         & icacls.exe $environmentFile /inheritance:r /grant:r 'SYSTEM:F' 'BUILTIN\Administrators:F' "${serviceIdentity}:R" | Out-Null
+    }
+    $companyRegistry = Join-Path $dataRoot 'config\companies.stage1.json'
+    if (Test-Path -LiteralPath $companyRegistry) {
+        & icacls.exe $companyRegistry /inheritance:r /grant:r 'SYSTEM:F' 'BUILTIN\Administrators:F' "${serviceIdentity}:R" | Out-Null
     }
 }

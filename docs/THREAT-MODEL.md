@@ -13,10 +13,11 @@ Stage 1 policy, e-conomic API, and Windows filesystem/service manager.
 | Unauthenticated internet caller | Edge TLS, mandatory signed Entra bearer token, 401, body/time limits | Endpoint metadata and health remain intentionally public and minimal |
 | Token from wrong tenant/client | Tenant-specific discovery, issuer/tid/aud checks, RS256 signature, expiry/nbf | Compromised approved account remains an identity-provider incident |
 | Reader attempts a write | Role-to-tool mapping checked before dispatch and in callback | Incorrect Entra group assignment can grant intended DraftCreator rights |
+| User selects another company's ID | Authorized-company listing, required explicit `companyId`, per-company user ACL, generic denial, isolated client credentials | A deliberately broad `*` ACL grants every globally authorized user access |
 | Prompt/tool injection requests booking | Forbidden tools absent; exact write endpoints; policy and tests deny booking/sending/payment/delete | Draft content still requires human review in e-conomic |
 | SSRF or credential exfiltration | No URL/method tool input, catalog allowlist, traversal rejection, production host pinning | A compromised Windows administrator can alter deployed code/config |
 | Oversized/malformed request or abuse | Proxy and application body limits, JSON/content-type validation, request timeout | Direct Caddy exposure lacks Cloudflare DDoS/rate controls; valid-token abuse needs monitoring |
-| Wrong e-conomic agreement | `/self` equality check immediately before each draft; live tooling fixed to `1382005` | Agreement context/API semantics could change and must be revalidated on upgrade |
+| Wrong e-conomic agreement or crossed keys | Unique registry IDs/agreements, one credential pair per client, isolation tests, `/self` equality check immediately before each draft | Agreement context/API semantics could change and must be revalidated on upgrade |
 | Secret leakage in logs/errors | Named and bearer redaction, generic public errors, no payload logging, restricted ACL | Administrator memory/process inspection can recover process secrets |
 | Supply-chain/release tampering | Pinned upstream, lockfile, audit, WinSW/Caddy archive checksums, manifest hashes, tagged artifact | GitHub/account compromise requires independent artifact provenance controls |
 | Tunnel credential theft | Restricted service config, no repository token, documented rotation | Existing connectors persist until restarted/force-disconnected |

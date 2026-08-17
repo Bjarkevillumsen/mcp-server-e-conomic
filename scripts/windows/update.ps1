@@ -29,6 +29,7 @@ try {
     }
     Copy-Item -LiteralPath (Join-Path $incomingRoot 'release-manifest.json') -Destination $installRoot -Force
     Copy-Item -LiteralPath (Join-Path $incomingRoot 'config\stage1.env.example') -Destination (Join-Path $dataRoot 'config') -Force
+    Copy-Item -LiteralPath (Join-Path $incomingRoot 'config\companies.stage1.example.json') -Destination (Join-Path $dataRoot 'config') -Force
     Set-EconomicMcpAcls
     Start-Service -Name $script:EconomicMcpServiceName
     & (Join-Path $installRoot 'scripts\windows\healthcheck.ps1') -Retries 12 -RetryDelaySeconds 2

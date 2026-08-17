@@ -1,4 +1,5 @@
 export const STAGE1_READ_TOOLS = [
+  'stage1_list_companies',
   'stage1_check_connection',
   'stage1_get_company_context',
   'stage1_search_entities',

@@ -14,6 +14,10 @@ typed, documented, read-first, policy-aware, credential-sane, and audit-friendly
 This fork adds a production-hardened, localhost-only Stage 1 profile for an
 isolated Windows Server. It advertises bounded reads plus exactly two unbooked
 draft writes, validates single-tenant Microsoft Entra tokens and roles, and is
+able to isolate up to 100 e-conomic agreements behind one MCP connector. Every
+Stage 1 business tool requires a `companyId` returned by
+`stage1_list_companies`; each company has its own protected credential pair and
+optional Entra user-object ACL. It is
 packaged for WinSW and either Cloudflare Tunnel or the checksum-pinned Caddy
 HTTPS reverse proxy. Start with
 [`docs/STAGE1-SCOPE.md`](docs/STAGE1-SCOPE.md),

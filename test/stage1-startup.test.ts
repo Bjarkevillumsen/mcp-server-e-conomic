@@ -6,7 +6,7 @@ describe('Stage 1 production startup validation', () => {
     expect(validateStage1Startup(validEnvironment(), path => path === 'C:\\policy.json')).toMatchObject({
       production: true,
       host: '127.0.0.1',
-      expectedAgreementNumber: '1382005',
+      companies: [{ agreementNumber: '1382005' }],
       entra: { requiredScope: 'Mcp.Access' },
     });
   });
@@ -33,6 +33,26 @@ describe('Stage 1 production startup validation', () => {
 
   it('fails when the configured policy path does not exist', () => {
     expect(() => validateStage1Startup(validEnvironment(), () => false)).toThrow(/policy/i);
+  });
+
+  it('loads a multi-company registry without legacy single-company credentials', () => {
+    const env = validEnvironment();
+    delete env.ECONOMIC_APP_SECRET_TOKEN;
+    delete env.ECONOMIC_AGREEMENT_GRANT_TOKEN;
+    delete env.ECONOMIC_EXPECTED_AGREEMENT_NUMBER;
+    env.ECONOMIC_COMPANY_REGISTRY_PATH = 'C:\\companies.stage1.json';
+    const companies = [{
+      companyId: 'squaremeter',
+      displayName: 'SquareMeter',
+      agreementNumber: '1382005',
+      enabled: true,
+      access: { readUserOids: ['*'], draftUserOids: [] },
+      credentials: { appSecretToken: 'app', agreementGrantToken: 'grant' },
+    }];
+
+    const result = validateStage1Startup(env, () => true, () => companies);
+    expect(result.companyRegistryPath).toBe('C:\\companies.stage1.json');
+    expect(result.companies).toEqual(companies);
   });
 });
 
