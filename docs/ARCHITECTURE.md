@@ -4,9 +4,8 @@
 
 ```mermaid
 flowchart TD
-    Client["Claude, ChatGPT, or another MCP client"] -->|"HTTPS + Entra access token"| CF["Cloudflare public hostname"]
-    CF -->|"outbound tunnel connection"| CFD["cloudflared Windows service"]
-    CFD -->|"HTTP on 127.0.0.1:3000"| MCP["EconomicMcp Stage 1 service"]
+    Client["Claude, ChatGPT, or another MCP client"] -->|"HTTPS + Entra access token"| Edge["Public HTTPS transport"]
+    Edge -->|"Cloudflare Tunnel or Caddy TCP 443"| MCP["EconomicMcp Stage 1 service on 127.0.0.1:3000"]
     MCP -->|"OIDC metadata and JWKS"| Entra["Single Microsoft Entra tenant"]
     MCP -->|"outbound HTTPS with e-conomic tokens"| Economic["e-conomic REST and OpenAPI"]
     MCP --> Logs["redacted technical logs"]
@@ -15,8 +14,9 @@ flowchart TD
 
 The Windows host is a standalone internet-connected runtime. It does not use
 the corporate LAN, domain join, Windows integrated authentication, internal DNS,
-or a VPN. Cloudflare transports requests; it does not make authorization
-decisions for the application. The Node process verifies Entra tokens itself.
+or a VPN. The selected public transport is either Cloudflare Tunnel or Caddy on
+the standalone host. Neither transport makes authorization decisions for the
+application. The Node process verifies Entra tokens itself.
 
 ## Control flow
 
@@ -49,6 +49,6 @@ point, and deployment configuration.
 
 Authentication needs internet access to the tenant-specific Microsoft OIDC/JWKS
 endpoints. Business operations need e-conomic HTTPS. Public reachability needs
-Cloudflare when the preferred design is used. A failure of any dependency fails
+the configured Cloudflare or Caddy transport. A failure of any dependency fails
 the affected request; it never falls back to unsigned claims, another tenant, a
 different e-conomic host, or a broader tool profile.

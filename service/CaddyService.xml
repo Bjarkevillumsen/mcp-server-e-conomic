@@ -1,0 +1,22 @@
+<service>
+  <id>Caddy</id>
+  <name>Caddy HTTPS reverse proxy</name>
+  <description>TLS reverse proxy for the localhost-only e-conomic MCP service.</description>
+  <executable>%BASE%\caddy.exe</executable>
+  <arguments>run --config "C:\ProgramData\Caddy\config\Caddyfile" --adapter caddyfile</arguments>
+  <workingdirectory>%BASE%</workingdirectory>
+  <env name="XDG_DATA_HOME" value="C:\ProgramData\Caddy\data" />
+  <env name="XDG_CONFIG_HOME" value="C:\ProgramData\Caddy\config" />
+  <startmode>Automatic</startmode>
+  <stoptimeout>30 sec</stoptimeout>
+  <onfailure action="restart" delay="10 sec" />
+  <onfailure action="restart" delay="30 sec" />
+  <onfailure action="restart" delay="60 sec" />
+  <resetfailure>1 hour</resetfailure>
+  <logpath>C:\ProgramData\Caddy\logs</logpath>
+  <log mode="roll-by-size-time">
+    <sizeThreshold>10240</sizeThreshold>
+    <pattern>yyyyMMdd</pattern>
+    <autoRollAtTime>00:00:00</autoRollAtTime>
+  </log>
+</service>

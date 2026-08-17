@@ -43,8 +43,16 @@ function Test-EconomicMcpPackageRoot {
         'app\node_modules',
         'service\EconomicMcpService.exe',
         'service\EconomicMcpService.xml',
+        'service\CaddyService.exe',
+        'service\CaddyService.xml',
         'service\start-service.ps1',
         'scripts\windows\healthcheck.ps1',
+        'scripts\windows\healthcheck-caddy.ps1',
+        'scripts\windows\install-caddy.ps1',
+        'scripts\windows\uninstall-caddy.ps1',
+        'caddy\caddy.exe',
+        'caddy\Caddy-LICENSE.txt',
+        'config\Caddyfile.example',
         'config\economic-policy.stage1.json',
         'config\stage1.env.example'
     )
@@ -90,7 +98,7 @@ function New-EconomicMcpBackup {
     $installRoot = Assert-EconomicMcpKnownRoot -Path $script:EconomicMcpInstallRoot -Kind Install
     $backupRoot = Join-Path $dataRoot "releases\$Name"
     New-Item -ItemType Directory -Path $backupRoot -Force | Out-Null
-    foreach ($item in @('app','service','scripts','release-manifest.json')) {
+    foreach ($item in @('app','service','scripts','caddy','release-manifest.json')) {
         $source = Join-Path $installRoot $item
         if (Test-Path -LiteralPath $source) {
             Copy-Item -LiteralPath $source -Destination $backupRoot -Recurse -Force
@@ -107,7 +115,7 @@ function Restore-EconomicMcpBackup {
     if (-not $resolvedBackup.StartsWith($expectedParent, [StringComparison]::OrdinalIgnoreCase)) {
         throw 'Refusing to restore from outside the EconomicMcp releases directory.'
     }
-    foreach ($item in @('app','service','scripts')) {
+    foreach ($item in @('app','service','scripts','caddy')) {
         $target = Join-Path $installRoot $item
         if (Test-Path -LiteralPath $target) { Remove-Item -LiteralPath $target -Recurse -Force }
         $source = Join-Path $resolvedBackup $item

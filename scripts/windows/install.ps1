@@ -34,7 +34,7 @@ foreach ($directory in @(
     (Join-Path $dataRoot 'releases')
 )) { New-Item -ItemType Directory -Path $directory -Force | Out-Null }
 
-foreach ($item in @('app','service','scripts')) {
+foreach ($item in @('app','service','scripts','caddy')) {
     Copy-Item -LiteralPath (Join-Path $packageRoot $item) -Destination (Join-Path $installRoot $item) -Recurse -Force
 }
 Copy-Item -LiteralPath (Join-Path $packageRoot 'release-manifest.json') -Destination $installRoot -Force

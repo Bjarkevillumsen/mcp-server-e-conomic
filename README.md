@@ -14,7 +14,8 @@ typed, documented, read-first, policy-aware, credential-sane, and audit-friendly
 This fork adds a production-hardened, localhost-only Stage 1 profile for an
 isolated Windows Server. It advertises bounded reads plus exactly two unbooked
 draft writes, validates single-tenant Microsoft Entra tokens and roles, and is
-packaged for WinSW and Cloudflare Tunnel. Start with
+packaged for WinSW and either Cloudflare Tunnel or the checksum-pinned Caddy
+HTTPS reverse proxy. Start with
 [`docs/STAGE1-SCOPE.md`](docs/STAGE1-SCOPE.md),
 [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md), and
 [`docs/WINDOWS-DEPLOYMENT.md`](docs/WINDOWS-DEPLOYMENT.md).

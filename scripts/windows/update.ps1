@@ -22,7 +22,7 @@ $backupRoot = $null
 try {
     Stop-EconomicMcpService
     $backupRoot = New-EconomicMcpBackup -Name $backupName
-    foreach ($item in @('app','service','scripts')) {
+    foreach ($item in @('app','service','scripts','caddy')) {
         $target = Join-Path $installRoot $item
         if (Test-Path -LiteralPath $target) { Remove-Item -LiteralPath $target -Recurse -Force }
         Copy-Item -LiteralPath (Join-Path $incomingRoot $item) -Destination $target -Recurse -Force
