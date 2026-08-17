@@ -139,10 +139,13 @@ export function registerStage1Tools(
   registerTool(server, options, 'economic_list_companies', {
     title: 'List authorized e-conomic companies',
     description:
-      'List every e-conomic company the signed-in user may access. Names are returned as Unicode. Use companyId in company-specific tools.',
+      'List every e-conomic company the signed-in user may access, with an authoritative count. Names are returned as Unicode. Use companyId in company-specific tools.',
     inputSchema: {},
     annotations: readAnnotations(),
-  }, async () => jsonToolResult({ companies: companies.listAuthorized(options.requestContext?.principal) }));
+  }, async () => {
+    const authorizedCompanies = companies.listAuthorized(options.requestContext?.principal);
+    return jsonToolResult({ count: authorizedCompanies.length, companies: authorizedCompanies });
+  });
 
   registerTool(server, options, 'economic_get_company_context', {
     title: 'Get e-conomic company context',

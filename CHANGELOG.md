@@ -32,6 +32,8 @@ Conditional booking (booking duty) — booking stays denied by default:
 
 ## Unreleased
 
+- Added an authoritative `count` to `economic_list_companies`, preventing MCP
+  clients from miscounting larger authorized company arrays.
 - Fixed the Stage 1 Windows updater's atomic policy migration on Windows
   PowerShell 5.1 by supplying a valid same-volume replacement-backup path. The
   durable release backup and automatic rollback behavior remain unchanged.
