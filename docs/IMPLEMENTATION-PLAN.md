@@ -20,7 +20,8 @@ audit findings are explicit.
 
 - Add the Stage 1 server/profile and exact MCP tool allowlist.
 - Wrap upstream reads under Stage 1 names.
-- Add bounded, GET-only `stage1_read_economic` using the upstream catalog.
+- Add bounded, GET-only `economic_query` using enum-backed datasets and
+  structured filter validation.
 - Add direct draft invoice and journal-entry creation using the upstream client,
   prepared-operation validation, policy, and audit facilities.
 - Add reusable agreement-number validation.
@@ -61,7 +62,7 @@ passes.
 
 - Add a fail-closed, protected registry for 1-100 agreements with unique
   `companyId` and agreement number plus isolated token pairs.
-- Add `stage1_list_companies`, require `companyId` everywhere else, and enforce
+- Add `economic_list_companies`, require `companyId` on company-specific tools, and enforce
   per-company user-object ACLs after global Entra RBAC.
 - Tag technical/audit events with company identity, verify each draft against
   the selected agreement, and provide a hidden-input Windows onboarding helper.

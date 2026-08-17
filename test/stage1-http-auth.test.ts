@@ -115,8 +115,8 @@ describe('Stage 1 protected HTTP resource', () => {
   it('returns HTTP 403 when Reader invokes either write tool', async () => {
     const readerToken = await token({ roles: [ECONOMIC_READER_ROLE] });
     for (const name of [
-      'stage1_create_sales_invoice_draft',
-      'stage1_create_journal_draft_entry',
+      'economic_create_sales_invoice_draft',
+      'economic_create_journal_draft_entry',
     ]) {
       const response = await postMcp(mcpRequest('tools/call', { name, arguments: {} }), readerToken);
       expect(response.status).toBe(403);
@@ -159,7 +159,7 @@ describe('Stage 1 protected HTTP resource', () => {
     const creator = await token({ roles: [ECONOMIC_DRAFT_CREATOR_ROLE] });
     const malformedWrite = await postMcp(
       mcpRequest('tools/call', {
-        name: 'stage1_create_sales_invoice_draft',
+        name: 'economic_create_sales_invoice_draft',
         arguments: {},
       }),
       creator,

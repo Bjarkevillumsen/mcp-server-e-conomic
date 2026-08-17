@@ -22,14 +22,14 @@ interface CliOptions {
 }
 
 const readCases = [
-  { domain: 'customers', serviceId: 'rest', pathTemplate: '/customers' },
-  { domain: 'suppliers', serviceId: 'rest', pathTemplate: '/suppliers' },
-  { domain: 'products', serviceId: 'rest', pathTemplate: '/products' },
-  { domain: 'chart-of-accounts', serviceId: 'rest', pathTemplate: '/accounts' },
-  { domain: 'invoices', serviceId: 'rest', pathTemplate: '/invoices/booked' },
-  { domain: 'accounting-entries', serviceId: 'booked-entries', pathTemplate: '/booked-entries/paged' },
-  { domain: 'projects', serviceId: 'projects', pathTemplate: '/Projects/paged' },
-  { domain: 'budgets', serviceId: 'budgets', pathTemplate: '/budget-figures/paged' },
+  { domain: 'customers', dataset: 'customers' },
+  { domain: 'suppliers', dataset: 'suppliers' },
+  { domain: 'products', dataset: 'products' },
+  { domain: 'chart-of-accounts', dataset: 'accounts' },
+  { domain: 'invoices', dataset: 'invoices_booked' },
+  { domain: 'accounting-entries', dataset: 'booked_entries' },
+  { domain: 'projects', dataset: 'projects' },
+  { domain: 'budgets', dataset: 'budgets' },
 ] as const;
 
 async function main(): Promise<void> {
@@ -66,18 +66,17 @@ async function main(): Promise<void> {
 async function runReadAcceptance(client: Client): Promise<Record<string, unknown>> {
   const results: Array<Record<string, unknown>> = [];
   const company = await client.callTool({
-    name: 'stage1_get_company_context',
+    name: 'economic_get_company_context',
     arguments: { companyId: liveCompanyId() },
   });
   results.push({ domain: 'company-context', status: company.isError ? 'failed' : 'passed' });
 
   for (const testCase of readCases) {
     const result = await client.callTool({
-      name: 'stage1_read_economic',
+      name: 'economic_query',
       arguments: {
         companyId: liveCompanyId(),
-        serviceId: testCase.serviceId,
-        pathTemplate: testCase.pathTemplate,
+        dataset: testCase.dataset,
         pageSize: 1,
         maxRecords: 1,
       },
@@ -89,12 +88,11 @@ async function runReadAcceptance(client: Client): Promise<Record<string, unknown
   }
 
   const filtered = await client.callTool({
-    name: 'stage1_read_economic',
+    name: 'economic_query',
     arguments: {
       companyId: liveCompanyId(),
-      serviceId: 'rest',
-      pathTemplate: '/customers',
-      filter: 'name$like:*',
+      dataset: 'customers',
+      filters: [{ field: 'name', operator: 'like', value: 'a' }],
       page: 0,
       pageSize: 1,
       maxRecords: 1,
@@ -113,7 +111,7 @@ async function createAndVerifyInvoiceDraft(
   draft: Record<string, unknown>,
 ): Promise<Record<string, unknown>> {
   const creation = await client.callTool({
-    name: 'stage1_create_sales_invoice_draft',
+    name: 'economic_create_sales_invoice_draft',
     arguments: {
       companyId: liveCompanyId(),
       draft,
@@ -129,8 +127,8 @@ async function createAndVerifyInvoiceDraft(
   }
 
   const readBack = requireSuccessfulToolResult(await client.callTool({
-    name: 'stage1_get_entity',
-    arguments: { companyId: liveCompanyId(), serviceId: 'rest', resource: 'invoices/drafts', number },
+    name: 'economic_query',
+    arguments: { companyId: liveCompanyId(), dataset: 'invoices_drafts', recordNumber: number },
   }));
   assertDraftReadBack(nestedReadData(readBack), 'invoice');
 
@@ -156,7 +154,7 @@ async function createAndVerifyJournalDraft(
       : `${STAGE1_LIVE_TEST_REFERENCE}${existingText ? ` - ${existingText}` : ''}`,
   };
   const creation = await client.callTool({
-    name: 'stage1_create_journal_draft_entry',
+    name: 'economic_create_journal_draft_entry',
     arguments: {
       companyId: liveCompanyId(),
       entry,
@@ -172,8 +170,8 @@ async function createAndVerifyJournalDraft(
   }
 
   const readBack = requireSuccessfulToolResult(await client.callTool({
-    name: 'stage1_get_entity',
-    arguments: { companyId: liveCompanyId(), serviceId: 'journals', resource: 'draft-entries', number },
+    name: 'economic_query',
+    arguments: { companyId: liveCompanyId(), dataset: 'journal_drafts', recordNumber: number },
   }));
   assertDraftReadBack(nestedReadData(readBack), 'journal');
 
@@ -191,17 +189,17 @@ function runNegativePolicyChecks(): Record<string, unknown> {
   const policy: EconomicPolicy = {
     writesEnabled: true,
     bookingEnabled: false,
-    allowedCapabilities: ['stage1_create_sales_invoice_draft', 'stage1_create_journal_draft_entry'],
+    allowedCapabilities: ['economic_create_sales_invoice_draft', 'economic_create_journal_draft_entry'],
     allowedServices: ['rest', 'journals'],
     allowedMethods: ['POST'],
     deniedPathPatterns: [],
   };
   const environment = { ECONOMIC_ENABLE_WRITES: 'true', ECONOMIC_ENABLE_BOOKING: 'false' };
   const checks = [
-    ['invoice-booking', 'stage1_create_sales_invoice_draft', 'rest', 'POST', '/invoices/drafts/1/book'],
-    ['journal-booking', 'stage1_create_journal_draft_entry', 'journals', 'POST', '/draft-entries/1/book'],
+    ['invoice-booking', 'economic_create_sales_invoice_draft', 'rest', 'POST', '/invoices/drafts/1/book'],
+    ['journal-booking', 'economic_create_journal_draft_entry', 'journals', 'POST', '/draft-entries/1/book'],
     ['payment', 'economic_prepare_payment_registration', 'journals', 'POST', '/draft-entries'],
-    ['delete', 'stage1_create_sales_invoice_draft', 'rest', 'DELETE', '/invoices/drafts/1'],
+    ['delete', 'economic_create_sales_invoice_draft', 'rest', 'DELETE', '/invoices/drafts/1'],
     ['customer-update', 'economic_prepare_customer_change', 'rest', 'PUT', '/customers/1'],
     ['supplier-update', 'economic_prepare_supplier_change', 'rest', 'PUT', '/suppliers/1'],
     ['product-update', 'economic_prepare_product_change', 'rest', 'PUT', '/products/1'],
@@ -290,8 +288,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function nestedReadData(value: Record<string, unknown>): unknown {
-  const result = isRecord(value.result) ? value.result : {};
-  return result.data;
+  return value.records;
 }
 
 function liveCompanyId(): string {

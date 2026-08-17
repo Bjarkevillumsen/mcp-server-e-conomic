@@ -10,8 +10,8 @@ const policy: EconomicPolicy = {
   writesEnabled: true,
   bookingEnabled: false,
   allowedCapabilities: [
-    'stage1_create_sales_invoice_draft',
-    'stage1_create_journal_draft_entry',
+    'economic_create_sales_invoice_draft',
+    'economic_create_journal_draft_entry',
   ],
   allowedServices: ['rest', 'journals'],
   allowedMethods: ['POST'],
@@ -64,8 +64,8 @@ describe('Stage 1 catalog reads', () => {
 
 describe('Stage 1 write policy', () => {
   it.each([
-    ['stage1_create_sales_invoice_draft', 'rest', '/invoices/drafts'],
-    ['stage1_create_journal_draft_entry', 'journals', '/draft-entries'],
+    ['economic_create_sales_invoice_draft', 'rest', '/invoices/drafts'],
+    ['economic_create_journal_draft_entry', 'journals', '/draft-entries'],
   ])('allows only the approved POST capability %s', (capability, serviceId, path) => {
     expect(checkStage1Policy({
       capability,
@@ -77,12 +77,12 @@ describe('Stage 1 write policy', () => {
   });
 
   it.each([
-    ['book invoice', 'stage1_create_sales_invoice_draft', 'rest', 'POST', '/invoices/booked'],
-    ['send invoice', 'stage1_create_sales_invoice_draft', 'rest', 'POST', '/invoices/drafts/1/send'],
-    ['book journal', 'stage1_create_journal_draft_entry', 'journals', 'POST', '/entries/draft/1/book'],
+    ['book invoice', 'economic_create_sales_invoice_draft', 'rest', 'POST', '/invoices/booked'],
+    ['send invoice', 'economic_create_sales_invoice_draft', 'rest', 'POST', '/invoices/drafts/1/send'],
+    ['book journal', 'economic_create_journal_draft_entry', 'journals', 'POST', '/entries/draft/1/book'],
     ['payment', 'economic_prepare_payment_registration', 'journals', 'POST', '/draft-entries'],
     ['open-item matching', 'economic_prepare_open_item_match', 'booked-entries', 'POST', '/booked-entries/match'],
-    ['delete', 'stage1_create_sales_invoice_draft', 'rest', 'DELETE', '/invoices/drafts/1'],
+    ['delete', 'economic_create_sales_invoice_draft', 'rest', 'DELETE', '/invoices/drafts/1'],
     ['customer update', 'economic_prepare_customer_change', 'rest', 'POST', '/customers'],
     ['supplier update', 'economic_prepare_supplier_change', 'rest', 'POST', '/suppliers'],
     ['product update', 'economic_prepare_product_change', 'rest', 'POST', '/products'],
@@ -90,7 +90,7 @@ describe('Stage 1 write policy', () => {
     ['project update', 'economic_prepare_project_change', 'projects', 'POST', '/Projects'],
     ['employee update', 'economic_prepare_employee_change', 'projects', 'POST', '/Employees'],
     ['arbitrary POST', 'economic_call_endpoint', 'rest', 'POST', '/invoices/drafts'],
-    ['arbitrary URL', 'stage1_create_sales_invoice_draft', 'rest', 'POST', 'https://evil.example/'],
+    ['arbitrary URL', 'economic_create_sales_invoice_draft', 'rest', 'POST', 'https://evil.example/'],
   ] as const)('denies %s', (_label, capability, serviceId, method, path) => {
     expect(checkStage1Policy({
       capability,
@@ -102,14 +102,14 @@ describe('Stage 1 write policy', () => {
 
   it('requires the independent write flag and rejects booking-enabled configuration', () => {
     expect(checkStage1Policy({
-      capability: 'stage1_create_sales_invoice_draft',
+      capability: 'economic_create_sales_invoice_draft',
       serviceId: 'rest',
       method: 'POST',
       path: '/invoices/drafts',
     }, policy, {})).toMatchObject({ allowed: false, reason: 'writes disabled' });
 
     expect(checkStage1Policy({
-      capability: 'stage1_create_sales_invoice_draft',
+      capability: 'economic_create_sales_invoice_draft',
       serviceId: 'rest',
       method: 'POST',
       path: '/invoices/drafts',

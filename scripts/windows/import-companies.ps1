@@ -126,7 +126,13 @@ $registryReplaced = $false
 
 try {
     try {
-        $registry = Get-Content -LiteralPath $registryPath -Raw | ConvertFrom-Json
+        # The registry is deliberately written as UTF-8 without a BOM. Windows
+        # PowerShell 5.1 otherwise treats the file as ANSI and turns Danish
+        # characters into mojibake on the next read/write cycle.
+        $registry = [IO.File]::ReadAllText(
+            $registryPath,
+            [Text.UTF8Encoding]::new($false)
+        ) | ConvertFrom-Json
     } catch {
         throw 'The existing company registry is not valid JSON.'
     }

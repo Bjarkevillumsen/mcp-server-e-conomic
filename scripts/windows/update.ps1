@@ -18,10 +18,54 @@ $currentVersion = if (Test-Path -LiteralPath (Join-Path $installRoot 'release-ma
 } else { 'unknown' }
 $backupName = "backup-$((Get-Date).ToUniversalTime().ToString('yyyyMMddTHHmmssZ'))-$currentVersion-$([Guid]::NewGuid().ToString('N').Substring(0,8))"
 $backupRoot = $null
+$policyPath = Join-Path $dataRoot 'config\economic-policy.stage1.json'
+$policyBackupName = 'economic-policy.stage1.json'
+
+function Update-Stage1V030PolicyNames {
+    param([Parameter(Mandatory)][string]$Path)
+    if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) {
+        throw 'The active Stage 1 policy file does not exist.'
+    }
+    try {
+        $policy = [IO.File]::ReadAllText($Path, [Text.UTF8Encoding]::new($false)) | ConvertFrom-Json
+    } catch {
+        throw 'The active Stage 1 policy file is not valid JSON.'
+    }
+    if ($null -eq $policy.allowedCapabilities -or $policy.allowedCapabilities -is [string]) {
+        throw 'The active Stage 1 policy has an invalid allowedCapabilities value.'
+    }
+
+    $mapping = @{
+        'stage1_create_sales_invoice_draft' = 'economic_create_sales_invoice_draft'
+        'stage1_create_journal_draft_entry' = 'economic_create_journal_draft_entry'
+    }
+    $changed = $false
+    $capabilities = @($policy.allowedCapabilities | ForEach-Object {
+        $name = [string]$_
+        if ($mapping.ContainsKey($name)) {
+            $changed = $true
+            $mapping[$name]
+        } else {
+            $name
+        }
+    } | Select-Object -Unique)
+    if (-not $changed) { return }
+
+    $policy.allowedCapabilities = $capabilities
+    $temporaryPolicy = Join-Path (Split-Path -Parent $Path) "economic-policy.stage1.$([Guid]::NewGuid().ToString('N')).tmp"
+    try {
+        $json = $policy | ConvertTo-Json -Depth 12
+        [IO.File]::WriteAllText($temporaryPolicy, $json, [Text.UTF8Encoding]::new($false))
+        [IO.File]::Replace($temporaryPolicy, $Path, $null, $true)
+    } finally {
+        if (Test-Path -LiteralPath $temporaryPolicy) { Remove-Item -LiteralPath $temporaryPolicy -Force }
+    }
+}
 
 try {
     Stop-EconomicMcpService
     $backupRoot = New-EconomicMcpBackup -Name $backupName
+    Copy-Item -LiteralPath $policyPath -Destination (Join-Path $backupRoot $policyBackupName) -Force
     foreach ($item in @('app','service','scripts','caddy')) {
         $target = Join-Path $installRoot $item
         if (Test-Path -LiteralPath $target) { Remove-Item -LiteralPath $target -Recurse -Force }
@@ -31,6 +75,7 @@ try {
     Copy-Item -LiteralPath (Join-Path $incomingRoot 'config\stage1.env.example') -Destination (Join-Path $dataRoot 'config') -Force
     Copy-Item -LiteralPath (Join-Path $incomingRoot 'config\companies.stage1.example.json') -Destination (Join-Path $dataRoot 'config') -Force
     Copy-Item -LiteralPath (Join-Path $incomingRoot 'config\companies-import.example.csv') -Destination (Join-Path $dataRoot 'config') -Force
+    Update-Stage1V030PolicyNames -Path $policyPath
     Set-EconomicMcpAcls
     Start-Service -Name $script:EconomicMcpServiceName
     & (Join-Path $installRoot 'scripts\windows\healthcheck.ps1') -Retries 12 -RetryDelaySeconds 2
@@ -39,6 +84,10 @@ try {
     if ($backupRoot -and (Test-Path -LiteralPath $backupRoot)) {
         Stop-EconomicMcpService
         Restore-EconomicMcpBackup -BackupRoot $backupRoot
+        $policyBackup = Join-Path $backupRoot $policyBackupName
+        if (Test-Path -LiteralPath $policyBackup -PathType Leaf) {
+            Copy-Item -LiteralPath $policyBackup -Destination $policyPath -Force
+        }
         Set-EconomicMcpAcls
         Start-Service -Name $script:EconomicMcpServiceName
     }

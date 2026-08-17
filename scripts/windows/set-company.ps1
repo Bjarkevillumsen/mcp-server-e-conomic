@@ -128,7 +128,12 @@ try {
 
     $registry = if (Test-Path -LiteralPath $registryPath -PathType Leaf) {
         try {
-            Get-Content -LiteralPath $registryPath -Raw | ConvertFrom-Json
+            # The registry is UTF-8 without a BOM. Use an explicit decoder so
+            # Windows PowerShell 5.1 cannot reinterpret Danish text as ANSI.
+            [IO.File]::ReadAllText(
+                $registryPath,
+                [Text.UTF8Encoding]::new($false)
+            ) | ConvertFrom-Json
         } catch {
             throw 'The existing company registry is not valid JSON.'
         }

@@ -2,8 +2,8 @@
   "writesEnabled": true,
   "bookingEnabled": false,
   "allowedCapabilities": [
-    "stage1_create_sales_invoice_draft",
-    "stage1_create_journal_draft_entry"
+    "economic_create_sales_invoice_draft",
+    "economic_create_journal_draft_entry"
   ],
   "allowedServices": [
     "rest",

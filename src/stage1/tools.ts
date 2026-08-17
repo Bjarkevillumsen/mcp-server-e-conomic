@@ -27,12 +27,18 @@ import {
   STAGE1_DEFAULT_PAGE_SIZE,
   STAGE1_MAX_PAGE_SIZE,
   STAGE1_MAX_TOTAL_RECORDS,
-  STAGE1_READ_SERVICE_IDS,
 } from './read.js';
+import {
+  ECONOMIC_DATASETS,
+  ECONOMIC_DATASET_IDS,
+  ECONOMIC_FILTER_OPERATORS,
+  compactDatasetResult,
+  compileDatasetRead,
+  removeTechnicalMetadata,
+  type EconomicDatasetId,
+  type EconomicStructuredFilter,
+} from './datasets.js';
 
-const stage1ServiceIds = STAGE1_READ_SERVICE_IDS as [string, ...string[]];
-const stage1ServiceIdSchema = z.enum(stage1ServiceIds);
-const pathParamsSchema = z.record(z.string(), z.union([z.string(), z.number()])).optional();
 const numberSchema = z.union([z.string().trim().min(1), z.number()]);
 const isoDateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Expected an ISO date (YYYY-MM-DD).');
 const isoDateTimeSchema = z.string().refine(
@@ -42,22 +48,40 @@ const isoDateTimeSchema = z.string().refine(
 const currencySchema = z.string().trim().regex(/^[A-Z]{3}$/, 'Expected an uppercase ISO 4217 currency code.');
 const companyIdSchema = z.string().trim().toLowerCase().regex(
   /^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/,
-  'Expected a companyId returned by stage1_list_companies.',
+  'Expected a companyId returned by economic_list_companies.',
 );
 const companyInputShape = {
   companyId: companyIdSchema.describe(
-    'Required e-conomic company ID. Call stage1_list_companies before choosing a company.',
+    'Required e-conomic company ID. Call economic_list_companies before choosing a company.',
   ),
 };
 
 const commonReadShape = {
-  filter: z.string().trim().max(4_000).optional(),
-  sort: z.string().trim().max(1_000).optional(),
-  cursor: z.string().trim().max(512).optional(),
-  page: z.number().int().min(0).max(1_000_000).default(0),
+  page: z.number().int().min(0).max(100).default(0)
+    .describe('Zero-based upstream page to start at.'),
   pageSize: z.number().int().min(1).max(STAGE1_MAX_PAGE_SIZE).default(STAGE1_DEFAULT_PAGE_SIZE),
-  maxRecords: z.number().int().min(1).max(STAGE1_MAX_TOTAL_RECORDS).default(STAGE1_DEFAULT_PAGE_SIZE),
+  maxRecords: z.number().int().min(1).max(STAGE1_MAX_TOTAL_RECORDS).default(STAGE1_DEFAULT_PAGE_SIZE)
+    .describe('Maximum total records. The server automatically fetches additional pages up to this limit.'),
 };
+
+const structuredFilterSchema = z.object({
+  field: z.string().trim().min(1).max(100)
+    .describe('Dataset-specific field from economic_describe_data.'),
+  operator: z.enum(ECONOMIC_FILTER_OPERATORS)
+    .describe('eq/ne compare exactly; like is case-insensitive contains; in/nin accept arrays.'),
+  value: z.union([
+    z.string().max(1_000),
+    z.number().finite(),
+    z.boolean(),
+    z.null(),
+    z.array(z.union([z.string().max(1_000), z.number().finite(), z.boolean(), z.null()])).min(1).max(200),
+  ]),
+});
+
+const structuredSortSchema = z.object({
+  field: z.string().trim().min(1).max(100),
+  direction: z.enum(['asc', 'desc']).default('asc'),
+});
 
 const invoiceLineSchema = z
   .object({
@@ -112,115 +136,97 @@ export function registerStage1Tools(
   companies: Stage1CompanyRegistry,
   options: RegisterStage1ToolsOptions = {},
 ): void {
-  registerTool(server, options, 'stage1_list_companies', {
+  registerTool(server, options, 'economic_list_companies', {
     title: 'List authorized e-conomic companies',
     description:
-      'List the e-conomic companies the signed-in user may access. Use the returned companyId in every other tool call.',
+      'List every e-conomic company the signed-in user may access. Names are returned as Unicode. Use companyId in company-specific tools.',
     inputSchema: {},
     annotations: readAnnotations(),
   }, async () => jsonToolResult({ companies: companies.listAuthorized(options.requestContext?.principal) }));
 
-  registerTool(server, options, 'stage1_check_connection', {
-    title: 'Check Stage 1 e-conomic connection',
-    description: 'Validate the selected e-conomic company credentials with a GET request.',
+  registerTool(server, options, 'economic_get_company_context', {
+    title: 'Get e-conomic company context',
+    description: 'Validate the selected connection and read its company/agreement context. Technical links and metadata are removed.',
     inputSchema: companyInputShape,
     annotations: readAnnotations(),
-  }, async input => companyReadResult(companies, options, input.companyId, client => client.rest('/')));
+  }, async input => companyReadResult(
+    companies,
+    options,
+    input.companyId,
+    async client => removeTechnicalMetadata(await client.rest('/self')),
+  ));
 
-  registerTool(server, options, 'stage1_get_company_context', {
-    title: 'Get Stage 1 company context',
-    description: 'Read the selected company and agreement context from e-conomic.',
-    inputSchema: companyInputShape,
-    annotations: readAnnotations(),
-  }, async input => companyReadResult(companies, options, input.companyId, client => client.rest('/self')));
-
-  registerPagedReadTool(server, companies, options, 'stage1_search_entities', {
-    title: 'Search Stage 1 entities',
-    description: 'Read an allowlisted e-conomic entity collection with bounded paging.',
-    defaultServiceId: 'rest',
-    defaultResource: 'customers',
-  });
-
-  registerTool(server, options, 'stage1_get_entity', {
-    title: 'Get one Stage 1 entity',
-    description: 'Read one entity by catalog service, resource, and number. URLs are not accepted.',
+  registerTool(server, options, 'economic_describe_data', {
+    title: 'Discover supported e-conomic data',
+    description:
+      'List supported dataset IDs or describe one dataset, including its valid filter fields, operators, sorting support, and examples. Call this before economic_query when unsure.',
     inputSchema: {
-      ...companyInputShape,
-      serviceId: stage1ServiceIdSchema,
-      resource: z.string().trim().min(1).max(200),
-      number: numberSchema,
+      dataset: z.enum(ECONOMIC_DATASET_IDS).optional()
+        .describe('Omit to list all supported datasets; provide one ID for full filter documentation.'),
     },
     annotations: readAnnotations(),
-  }, async input => companyReadResult(companies, options, input.companyId, client => executeStage1Read(client, {
-      serviceId: input.serviceId,
-      resource: input.resource,
-      number: input.number,
-    })));
+  }, async input => jsonToolResult(describeEconomicData(input.dataset)));
 
-  registerPagedReadTool(server, companies, options, 'stage1_get_customer_overview', {
-    title: 'Get Stage 1 customer overview',
-    description: 'Read customers and customer reference data.',
-    defaultServiceId: 'customers',
-    defaultResource: 'Customers',
-  });
-  registerPagedReadTool(server, companies, options, 'stage1_get_supplier_overview', {
-    title: 'Get Stage 1 supplier overview',
-    description: 'Read suppliers and supplier reference data.',
-    defaultServiceId: 'rest',
-    defaultResource: 'suppliers',
-  });
-  registerPagedReadTool(server, companies, options, 'stage1_get_product_overview', {
-    title: 'Get Stage 1 product overview',
-    description: 'Read products, groups, prices, and units.',
-    defaultServiceId: 'rest',
-    defaultResource: 'products',
-  });
-  registerPagedReadTool(server, companies, options, 'stage1_get_accounting_entries', {
-    title: 'Get Stage 1 accounting entries',
-    description: 'Read draft or booked accounting entries without posting changes.',
-    defaultServiceId: 'booked-entries',
-    defaultResource: 'booked-entries',
-  });
-  registerPagedReadTool(server, companies, options, 'stage1_get_sales_documents', {
-    title: 'Get Stage 1 sales documents',
-    description: 'Read invoices, drafts, orders, or quotes.',
-    defaultServiceId: 'rest',
-    defaultResource: 'invoices/booked',
-  });
-  registerPagedReadTool(server, companies, options, 'stage1_get_project_overview', {
-    title: 'Get Stage 1 project overview',
-    description: 'Read projects, groups, employees, activities, and time-entry context.',
-    defaultServiceId: 'projects',
-    defaultResource: 'Projects',
-  });
-  registerPagedReadTool(server, companies, options, 'stage1_get_document', {
-    title: 'Get Stage 1 document metadata',
-    description: 'Read allowlisted document metadata and references.',
-    defaultServiceId: 'documents',
-    defaultResource: 'AttachedDocuments',
-  });
-  registerPagedReadTool(server, companies, options, 'stage1_get_report', {
-    title: 'Get Stage 1 report data',
-    description: 'Read accounts, booked entries, budgets, and accounting-year data.',
-    defaultServiceId: 'accounts',
-    defaultResource: 'Accounts',
-  });
-
-  registerTool(server, options, 'stage1_read_economic', {
-    title: 'Read a cataloged e-conomic endpoint',
+  registerTool(server, options, 'economic_query', {
+    title: 'Query validated e-conomic data',
     description:
-      'GET-only access to an upstream-cataloged relative path. Full URLs, hostnames, methods, traversal, unknown services, and webhooks are rejected.',
+      'Read one supported dataset with validated structured filters. Example: dataset=booked_entries, filters=[{field:supplierNumber,operator:eq,value:42},{field:date,operator:gte,value:2026-01-01}]. Unknown fields/operators fail before e-conomic is called. like is case-insensitive contains; in/nin accept arrays. pageSize is at most 100 and maxRecords auto-pages up to 500.',
     inputSchema: {
       ...companyInputShape,
-      serviceId: stage1ServiceIdSchema,
-      pathTemplate: z.string().trim().min(1).max(500),
-      pathParams: pathParamsSchema,
+      dataset: z.enum(ECONOMIC_DATASET_IDS)
+        .describe('Allowlisted dataset ID from economic_describe_data; resource/service names are not accepted.'),
+      recordNumber: numberSchema.optional().describe('Fetch one record by number; cannot be combined with filters or sort.'),
+      filters: z.array(structuredFilterSchema).min(1).max(20).optional()
+        .describe('All predicates are combined with AND. Field/operator pairs are validated for the selected dataset.'),
+      sort: z.array(structuredSortSchema).min(1).max(8).optional(),
       ...commonReadShape,
     },
     annotations: readAnnotations(),
-  }, async input => companyReadResult(companies, options, input.companyId, client => executeStage1Read(client, input)));
+  }, async input => {
+    const company = resolveCompany(companies, options, input.companyId, 'read');
+    const readInput = compileDatasetRead({
+      dataset: input.dataset,
+      recordNumber: input.recordNumber,
+      filters: input.filters,
+      sort: input.sort,
+      page: input.page,
+      pageSize: input.pageSize,
+      maxRecords: input.maxRecords,
+    });
+    const result = compactDatasetResult(input.dataset, await executeStage1Read(company.client, readInput));
+    return jsonToolResult({
+      company: compactCompany(company),
+      query: {
+        dataset: input.dataset,
+        ...(input.recordNumber !== undefined ? { recordNumber: input.recordNumber } : {}),
+        ...(input.filters ? { filters: input.filters } : {}),
+        ...(input.sort ? { sort: input.sort } : {}),
+      },
+      ...result,
+    });
+  });
 
-  registerTool(server, options, 'stage1_create_sales_invoice_draft', {
+  registerTool(server, options, 'economic_supplier_transactions', {
+    title: 'Find supplier transactions across companies',
+    description:
+      'Find booked entries for one supplier in an inclusive date period. supplierName can fan out across all authorized companies in parallel and resolves each company\'s own supplier number. supplierNumber is company-specific and therefore requires exactly one companyId. Returns explicit no_matches, supplier_not_found, or error states per company and compact totals.',
+    inputSchema: {
+      companyIds: z.array(companyIdSchema).min(1).max(100).optional()
+        .describe('Companies to search. Omit with supplierName to search all authorized companies.'),
+      supplierName: z.string().trim().min(1).max(255).optional()
+        .describe('Exact supplier name, matched case-insensitively in each company.'),
+      supplierNumber: z.number().int().positive().optional()
+        .describe('Exact company-specific supplier number. Requires exactly one companyId.'),
+      fromDate: isoDateSchema.describe('Inclusive start date (YYYY-MM-DD).'),
+      toDate: isoDateSchema.describe('Inclusive end date (YYYY-MM-DD).'),
+      pageSize: z.number().int().min(1).max(STAGE1_MAX_PAGE_SIZE).default(STAGE1_DEFAULT_PAGE_SIZE),
+      maxRecordsPerCompany: z.number().int().min(1).max(STAGE1_MAX_TOTAL_RECORDS).default(STAGE1_DEFAULT_PAGE_SIZE)
+        .describe('Maximum returned entries per company. Defaults to 100; raise deliberately up to 500.'),
+    },
+    annotations: readAnnotations(),
+  }, async input => jsonToolResult(await supplierTransactions(companies, options, input)));
+
+  registerTool(server, options, 'economic_create_sales_invoice_draft', {
     title: 'Create an unbooked sales invoice draft',
     description: 'Create one validated e-conomic sales invoice draft. Never books or sends it.',
     inputSchema: {
@@ -239,7 +245,7 @@ export function registerStage1Tools(
     return jsonToolResult(await createStage1Draft({
       company,
       options,
-      tool: 'stage1_create_sales_invoice_draft',
+      tool: 'economic_create_sales_invoice_draft',
       type: 'sales_invoice_draft',
       serviceId: 'rest',
       path: '/invoices/drafts',
@@ -251,7 +257,7 @@ export function registerStage1Tools(
     }));
   });
 
-  registerTool(server, options, 'stage1_create_journal_draft_entry', {
+  registerTool(server, options, 'economic_create_journal_draft_entry', {
     title: 'Create an unbooked journal draft entry',
     description: 'Create one validated e-conomic journal draft entry. Never books it or registers payment.',
     inputSchema: {
@@ -267,7 +273,7 @@ export function registerStage1Tools(
     return jsonToolResult(await createStage1Draft({
     company,
     options,
-    tool: 'stage1_create_journal_draft_entry',
+    tool: 'economic_create_journal_draft_entry',
     type: 'journal_draft_entry',
     serviceId: 'journals',
     path: '/draft-entries',
@@ -280,10 +286,271 @@ export function registerStage1Tools(
   });
 }
 
+interface SupplierTransactionsInput {
+  companyIds?: string[];
+  supplierName?: string;
+  supplierNumber?: number;
+  fromDate: string;
+  toDate: string;
+  pageSize: number;
+  maxRecordsPerCompany: number;
+}
+
+function describeEconomicData(datasetId?: EconomicDatasetId): Record<string, unknown> {
+  const filterSyntax = {
+    combination: 'All filters are combined with AND.',
+    underlyingDsl: {
+      note: 'Clients send structured filters. The server compiles them to e-conomic syntax after validation.',
+      mapping: 'eq->$eq:, ne->$ne:, gt->$gt:, gte->$gte:, lt->$lt:, lte->$lte:, like->$like:*value*, in->$in:[...], nin->$nin:[...].',
+      conjunction: '$and:',
+    },
+    operators: {
+      eq: 'Exact equality.',
+      ne: 'Not equal.',
+      gt: 'Greater than.',
+      gte: 'Greater than or equal.',
+      lt: 'Less than.',
+      lte: 'Less than or equal.',
+      like: 'Case-insensitive contains match for supported text fields.',
+      in: 'Value is in an array of 1-200 values.',
+      nin: 'Value is not in an array of 1-200 values.',
+    },
+    validation: 'Dataset, field, operator, value type, and sortability are validated locally before any e-conomic request.',
+  };
+
+  if (datasetId) {
+    const dataset = ECONOMIC_DATASETS[datasetId];
+    return {
+      dataset: datasetDescription(dataset),
+      filterSyntax,
+      paging: { pageSizeMin: 1, pageSizeMax: STAGE1_MAX_PAGE_SIZE, maxRecords: STAGE1_MAX_TOTAL_RECORDS },
+    };
+  }
+
+  return {
+    datasets: ECONOMIC_DATASET_IDS.map(id => {
+      const dataset = ECONOMIC_DATASETS[id];
+      return { id, title: dataset.title, description: dataset.description };
+    }),
+    nextStep: 'Call economic_describe_data with one dataset ID for valid fields, operators, sorting, and examples.',
+  };
+}
+
+function datasetDescription(dataset: (typeof ECONOMIC_DATASETS)[EconomicDatasetId]) {
+  return {
+    id: dataset.id,
+    title: dataset.title,
+    description: dataset.description,
+    upstream: { serviceId: dataset.serviceId, resource: dataset.resource },
+    filterFields: dataset.filterFields,
+    examples: dataset.examples,
+  };
+}
+
+async function supplierTransactions(
+  companies: Stage1CompanyRegistry,
+  options: RegisterStage1ToolsOptions,
+  input: SupplierTransactionsInput,
+): Promise<Record<string, unknown>> {
+  const hasName = Boolean(input.supplierName);
+  const hasNumber = input.supplierNumber !== undefined;
+  if (hasName === hasNumber) {
+    throw new Error('Provide exactly one of supplierName or supplierNumber.');
+  }
+  if (input.fromDate > input.toDate) {
+    throw new Error('fromDate must be on or before toDate.');
+  }
+
+  const authorizedIds = companies
+    .listAuthorized(options.requestContext?.principal)
+    .filter(company => company.permissions.read)
+    .map(company => company.companyId);
+  const companyIds = input.companyIds
+    ? [...new Set(input.companyIds)]
+    : authorizedIds;
+  if (companyIds.length === 0) {
+    throw new Error('No readable companies were selected.');
+  }
+  if (hasNumber && (!input.companyIds || companyIds.length !== 1)) {
+    throw new Error('supplierNumber is company-specific and requires exactly one companyId. Use supplierName for cross-company searches.');
+  }
+
+  const selected = companyIds.map(companyId => resolveCompany(companies, options, companyId, 'read'));
+  const results = await mapWithConcurrency(selected, 4, company => supplierTransactionsForCompany(company, input));
+  const errorCount = results.filter(result => result.status === 'error').length;
+  if (errorCount === results.length) {
+    throw new Error(`Supplier transaction search failed for all ${results.length} selected companies: ${results.map(result => `${result.company.companyId}: ${result.error}`).join('; ')}`);
+  }
+
+  const truncatedCount = results.filter(result => result.status === 'matched' && result.page?.truncated).length;
+  return {
+    query: {
+      ...(input.supplierName ? { supplierName: input.supplierName } : { supplierNumber: input.supplierNumber }),
+      fromDate: input.fromDate,
+      toDate: input.toDate,
+      companyIds,
+    },
+    complete: errorCount === 0 && truncatedCount === 0,
+    summary: {
+      companiesSearched: results.length,
+      companiesWithMatches: results.filter(result => result.status === 'matched').length,
+      companiesWithoutMatches: results.filter(result => result.status === 'no_matches').length,
+      suppliersNotFound: results.filter(result => result.status === 'supplier_not_found').length,
+      errors: errorCount,
+      truncatedCompanies: truncatedCount,
+    },
+    results,
+  };
+}
+
+interface SupplierCompanyResult {
+  company: ReturnType<typeof compactCompany>;
+  status: 'matched' | 'no_matches' | 'supplier_not_found' | 'error';
+  supplier?: Record<string, unknown>;
+  transactions?: unknown[];
+  summary?: Record<string, unknown>;
+  page?: { truncated: boolean; [key: string]: unknown };
+  error?: string;
+}
+
+async function supplierTransactionsForCompany(
+  company: ResolvedStage1Company,
+  input: SupplierTransactionsInput,
+): Promise<SupplierCompanyResult> {
+  try {
+    const supplier = input.supplierNumber !== undefined
+      ? { supplierNumber: input.supplierNumber }
+      : await resolveSupplierByName(company, input.supplierName as string);
+    if (!supplier) {
+      return { company: compactCompany(company), status: 'supplier_not_found' };
+    }
+
+    const supplierNumber = asPositiveInteger(supplier.supplierNumber);
+    if (supplierNumber === undefined) {
+      throw new Error('The matched supplier did not contain a valid supplierNumber.');
+    }
+    const filters: EconomicStructuredFilter[] = [
+      { field: 'supplierNumber', operator: 'eq', value: supplierNumber },
+      { field: 'date', operator: 'gte', value: `${input.fromDate}T00:00:00.000Z` },
+      { field: 'date', operator: 'lte', value: `${input.toDate}T23:59:59.999Z` },
+    ];
+    const readInput = compileDatasetRead({
+      dataset: 'booked_entries',
+      filters,
+      pageSize: input.pageSize,
+      maxRecords: input.maxRecordsPerCompany,
+    });
+    const compact = compactDatasetResult('booked_entries', await executeStage1Read(company.client, readInput));
+    const transactions = Array.isArray(compact.records) ? compact.records : [];
+    return {
+      company: compactCompany(company),
+      status: compact.matchStatus,
+      supplier: removeTechnicalMetadata(supplier) as Record<string, unknown>,
+      transactions,
+      summary: summarizeSupplierEntries(transactions),
+      page: compact.page,
+    };
+  } catch (error) {
+    return {
+      company: compactCompany(company),
+      status: 'error',
+      error: formatUnknownError(error),
+    };
+  }
+}
+
+async function resolveSupplierByName(
+  company: ResolvedStage1Company,
+  supplierName: string,
+): Promise<Record<string, unknown> | undefined> {
+  const readInput = compileDatasetRead({
+    dataset: 'suppliers',
+    filters: [{ field: 'name', operator: 'eq', value: supplierName }],
+    pageSize: 100,
+    maxRecords: 100,
+  });
+  const response = await executeStage1Read(company.client, readInput);
+  const exactMatches = collectionRecords(response.data)
+    .filter(isRecord)
+    .filter(supplier => typeof supplier.name === 'string' &&
+      supplier.name.localeCompare(supplierName, 'da', { sensitivity: 'base' }) === 0);
+  if (exactMatches.length > 1) {
+    throw new Error(`Supplier name "${supplierName}" is ambiguous in this company; use supplierNumber with one companyId.`);
+  }
+  return exactMatches[0];
+}
+
+function summarizeSupplierEntries(entries: unknown[]): Record<string, unknown> {
+  let baseCurrencyTotal = 0;
+  let baseCurrencyValues = 0;
+  const currencyTotals = new Map<string, number>();
+  for (const item of entries) {
+    if (!isRecord(item)) continue;
+    const baseAmount = asFiniteNumber(item.amountInBaseCurrency);
+    if (baseAmount !== undefined) {
+      baseCurrencyTotal += baseAmount;
+      baseCurrencyValues += 1;
+    }
+    const amount = asFiniteNumber(item.amount);
+    const currency = typeof item.currencyCode === 'string' ? item.currencyCode : undefined;
+    if (amount !== undefined && currency) {
+      currencyTotals.set(currency, (currencyTotals.get(currency) ?? 0) + amount);
+    }
+  }
+  return {
+    transactionCount: entries.length,
+    ...(baseCurrencyValues > 0 ? { baseCurrencyTotal: roundAmount(baseCurrencyTotal) } : {}),
+    currencyTotals: Object.fromEntries(
+      [...currencyTotals.entries()].sort(([left], [right]) => left.localeCompare(right))
+        .map(([currency, amount]) => [currency, roundAmount(amount)]),
+    ),
+  };
+}
+
+function collectionRecords(value: unknown): unknown[] {
+  if (Array.isArray(value)) return value;
+  if (isRecord(value) && Array.isArray(value.collection)) return value.collection;
+  if (isRecord(value) && Array.isArray(value.items)) return value.items;
+  return [];
+}
+
+async function mapWithConcurrency<T, R>(
+  items: readonly T[],
+  concurrency: number,
+  worker: (item: T) => Promise<R>,
+): Promise<R[]> {
+  const results = new Array<R>(items.length);
+  let nextIndex = 0;
+  const workerCount = Math.min(concurrency, items.length);
+  await Promise.all(Array.from({ length: workerCount }, async () => {
+    for (;;) {
+      const index = nextIndex;
+      nextIndex += 1;
+      if (index >= items.length) break;
+      results[index] = await worker(items[index] as T);
+    }
+  }));
+  return results;
+}
+
+function asPositiveInteger(value: unknown): number | undefined {
+  const number = asFiniteNumber(value);
+  return number !== undefined && Number.isInteger(number) && number > 0 ? number : undefined;
+}
+
+function asFiniteNumber(value: unknown): number | undefined {
+  const number = typeof value === 'number' ? value : typeof value === 'string' && value.trim() ? Number(value) : Number.NaN;
+  return Number.isFinite(number) ? number : undefined;
+}
+
+function roundAmount(value: number): number {
+  return Math.round((value + Number.EPSILON) * 100) / 100;
+}
+
 interface DraftCreationInput {
   company: ResolvedStage1Company;
   options: RegisterStage1ToolsOptions;
-  tool: 'stage1_create_sales_invoice_draft' | 'stage1_create_journal_draft_entry';
+  tool: 'economic_create_sales_invoice_draft' | 'economic_create_journal_draft_entry';
   type: 'sales_invoice_draft' | 'journal_draft_entry';
   serviceId: 'rest' | 'journals';
   path: '/invoices/drafts' | '/draft-entries';
@@ -436,37 +703,6 @@ async function createStage1Draft(input: DraftCreationInput): Promise<Record<stri
   }
 }
 
-function registerPagedReadTool(
-  server: McpServer,
-  companies: Stage1CompanyRegistry,
-  options: RegisterStage1ToolsOptions,
-  name: Exclude<Stage1ToolName, 'stage1_list_companies' | 'stage1_check_connection' | 'stage1_get_company_context' | 'stage1_get_entity' | 'stage1_read_economic' | 'stage1_create_sales_invoice_draft' | 'stage1_create_journal_draft_entry'>,
-  definition: {
-    title: string;
-    description: string;
-    defaultServiceId: string;
-    defaultResource: string;
-  },
-): void {
-  registerTool(server, options, name, {
-    title: definition.title,
-    description: definition.description,
-    inputSchema: {
-      ...companyInputShape,
-      serviceId: stage1ServiceIdSchema.default(definition.defaultServiceId),
-      resource: z.string().trim().min(1).max(200).default(definition.defaultResource),
-      number: numberSchema.optional(),
-      ...commonReadShape,
-    },
-    annotations: readAnnotations(),
-  }, async input => companyReadResult(
-    companies,
-    options,
-    input.companyId,
-    client => executeStage1Read(client, input),
-  ));
-}
-
 function registerTool(
   server: McpServer,
   options: RegisterStage1ToolsOptions,
@@ -599,6 +835,13 @@ function publicCompany(company: ResolvedStage1Company) {
   };
 }
 
+function compactCompany(company: ResolvedStage1Company) {
+  return {
+    companyId: company.companyId,
+    displayName: company.displayName,
+  };
+}
+
 function companyIdFromToolArguments(args: any[]): string | undefined {
   const input = args[0];
   return isRecord(input) && typeof input.companyId === 'string' ? input.companyId : undefined;
@@ -629,7 +872,7 @@ function jsonToolResult(data: unknown) {
     content: [
       {
         type: 'text' as const,
-        text: JSON.stringify(data, null, 2),
+        text: JSON.stringify(data),
       },
     ],
   };

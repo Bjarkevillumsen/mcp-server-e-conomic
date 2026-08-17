@@ -108,6 +108,10 @@ function New-EconomicMcpBackup {
             Copy-Item -LiteralPath $source -Destination $backupRoot -Recurse -Force
         }
     }
+    $activePolicy = Join-Path $dataRoot 'config\economic-policy.stage1.json'
+    if (Test-Path -LiteralPath $activePolicy -PathType Leaf) {
+        Copy-Item -LiteralPath $activePolicy -Destination (Join-Path $backupRoot 'economic-policy.stage1.json') -Force
+    }
     return $backupRoot
 }
 
@@ -128,6 +132,10 @@ function Restore-EconomicMcpBackup {
     $manifest = Join-Path $resolvedBackup 'release-manifest.json'
     if (Test-Path -LiteralPath $manifest) {
         Copy-Item -LiteralPath $manifest -Destination (Join-Path $installRoot 'release-manifest.json') -Force
+    }
+    $policyBackup = Join-Path $resolvedBackup 'economic-policy.stage1.json'
+    if (Test-Path -LiteralPath $policyBackup -PathType Leaf) {
+        Copy-Item -LiteralPath $policyBackup -Destination (Join-Path $script:EconomicMcpDataRoot 'config\economic-policy.stage1.json') -Force
     }
 }
 

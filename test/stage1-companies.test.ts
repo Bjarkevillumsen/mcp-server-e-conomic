@@ -60,6 +60,22 @@ describe('Stage 1 multi-company registry', () => {
     expect(JSON.stringify(list)).not.toContain('grant-token');
   });
 
+  it('round-trips Danish company names as UTF-8 without mojibake', async () => {
+    const companies = [
+      { ...company(1), displayName: 'Ejendommen Sølvgade 96 ApS' },
+      { ...company(2), displayName: 'Værnedamsvej - Den Franske Skole' },
+      { ...company(3), displayName: 'Sølvgade Holding ApS' },
+    ];
+    const path = await registryFile(companies);
+    const registry = new Stage1CompanyRegistry(readStage1CompanyRegistry(path));
+    const names = registry.listAuthorized(principal([ECONOMIC_READER_ROLE])).map(item => item.displayName);
+
+    expect(names).toContain('Ejendommen Sølvgade 96 ApS');
+    expect(names).toContain('Værnedamsvej - Den Franske Skole');
+    expect(names).toContain('Sølvgade Holding ApS');
+    expect(JSON.stringify(names)).not.toMatch(/Ã|Â/);
+  });
+
   it('enforces company-specific read and draft access in addition to global Entra roles', () => {
     const registry = new Stage1CompanyRegistry([
       company(1, { readUserOids: [readerOid], draftUserOids: [otherOid] }),
