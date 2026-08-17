@@ -58,6 +58,7 @@ describe('Stage 1 MCP profile', () => {
       const result = await mcpClient.callTool({ name: 'economic_list_companies', arguments: {} });
       const text = JSON.stringify(resultJson(result));
       expect(resultJson(result)).toEqual({
+        count: 1,
         companies: [{
           companyId: 'squaremeter',
           displayName: 'SquareMeter',
